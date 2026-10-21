@@ -1,26 +1,54 @@
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import fs from 'fs';
 import path from 'path';
-
 import { fileURLToPath } from 'url';
 
 let db: SqlJsDatabase | null = null;
 const DATA_DIR = path.resolve(process.cwd(), 'data');
-const DB_FILE = path.join(DATA_DIR, 'aicte_oneflow.sqlite');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_FILE = path.resolve(__dirname, 'schema.sql');
+
+let customDbPath: string | null = null;
+
+export function setDatabasePath(p: string | null): void {
+  customDbPath = p;
+  db = null; // force reload for the new path
+}
+
+export function getDbFilePath(): string {
+  if (customDbPath) return customDbPath;
+  if (process.env.DB_PATH) return process.env.DB_PATH;
+  const filename = process.env.NODE_ENV === 'test' ? 'test_aicte_oneflow.sqlite' : 'aicte_oneflow.sqlite';
+  return path.join(DATA_DIR, filename);
+}
+
+// Single-writer async mutex queue to serialize all mutations and transactions
+class AsyncLock {
+  private queue: Promise<void> = Promise.resolve();
+
+  acquire<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.queue.then(() => fn());
+    this.queue = next.then(() => {}, () => {});
+    return next;
+  }
+}
+
+const writerLock = new AsyncLock();
 
 export async function getDatabase(): Promise<SqlJsDatabase> {
   if (db) return db;
 
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  const targetFile = getDbFilePath();
+  const targetDir = path.dirname(targetFile);
+
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
   }
 
   const SQL = await initSqlJs();
 
-  if (fs.existsSync(DB_FILE)) {
-    const fileBuffer = fs.readFileSync(DB_FILE);
+  if (fs.existsSync(targetFile)) {
+    const fileBuffer = fs.readFileSync(targetFile);
     db = new SQL.Database(fileBuffer);
   } else {
     db = new SQL.Database();
@@ -34,11 +62,24 @@ export async function getDatabase(): Promise<SqlJsDatabase> {
 }
 
 export function persistToDisk(database: SqlJsDatabase): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  const targetPath = getDbFilePath();
+  const targetDir = path.dirname(targetPath);
+
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
   }
+
   const data = database.export();
-  fs.writeFileSync(DB_FILE, Buffer.from(data));
+  // Atomic write via temp file and atomic rename to guarantee crash-resilient persistence
+  const tempPath = `${targetPath}.tmp.${Date.now()}.${Math.random().toString(36).substring(2, 7)}`;
+  fs.writeFileSync(tempPath, Buffer.from(data));
+  try {
+    fs.renameSync(tempPath, targetPath);
+  } catch (_err) {
+    // Fallback if cross-device or permission lock
+    fs.copyFileSync(tempPath, targetPath);
+    try { fs.unlinkSync(tempPath); } catch {}
+  }
 }
 
 export async function query<T = any>(sqlStr: string, params: any[] = []): Promise<T[]> {
@@ -62,43 +103,66 @@ export async function queryOne<T = any>(sqlStr: string, params: any[] = []): Pro
 let inTransaction = false;
 
 export async function execute(sqlStr: string, params: any[] = []): Promise<void> {
-  const database = await getDatabase();
-  database.run(sqlStr, params);
-  if (!inTransaction) {
-    persistToDisk(database);
+  if (inTransaction) {
+    const database = await getDatabase();
+    database.run(sqlStr, params);
+    return;
   }
+
+  await writerLock.acquire(async () => {
+    const database = await getDatabase();
+    database.run(sqlStr, params);
+    persistToDisk(database);
+  });
 }
 
 export async function transaction<T>(callback: () => Promise<T>): Promise<T> {
-  const database = await getDatabase();
-  database.run('BEGIN TRANSACTION;');
-  inTransaction = true;
-  try {
-    const result = await callback();
-    inTransaction = false;
-    database.run('COMMIT;');
-    persistToDisk(database);
-    return result;
-  } catch (error) {
-    inTransaction = false;
-    console.error('Transaction failed with inner error:', error);
+  return writerLock.acquire(async () => {
+    const database = await getDatabase();
+    database.run('BEGIN TRANSACTION;');
+    inTransaction = true;
     try {
-      database.run('ROLLBACK;');
-    } catch (_rbErr) {
-      // ignore rollback error
+      const result = await callback();
+      inTransaction = false;
+      database.run('COMMIT;');
+      persistToDisk(database);
+      return result;
+    } catch (error) {
+      inTransaction = false;
+      try {
+        database.run('ROLLBACK;');
+      } catch {
+        // ignore rollback error if already aborted
+      }
+      throw error;
     }
-    throw error;
-  }
+  });
 }
 
 export async function resetDatabase(): Promise<void> {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  const SQL = await initSqlJs();
-  const newDb = new SQL.Database();
-  const schemaSql = fs.readFileSync(SCHEMA_FILE, 'utf-8');
-  newDb.run(schemaSql);
-  persistToDisk(newDb);
-  db = newDb;
+  await writerLock.acquire(async () => {
+    const targetFile = getDbFilePath();
+    const targetDir = path.dirname(targetFile);
+
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    const SQL = await initSqlJs();
+    const newDb = new SQL.Database();
+    const schemaSql = fs.readFileSync(SCHEMA_FILE, 'utf-8');
+    newDb.run(schemaSql);
+    persistToDisk(newDb);
+    db = newDb;
+  });
+}
+
+export async function closeDatabase(): Promise<void> {
+  await writerLock.acquire(async () => {
+    if (db) {
+      persistToDisk(db);
+      db.close();
+      db = null;
+    }
+  });
 }

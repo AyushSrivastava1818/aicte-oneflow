@@ -43,7 +43,7 @@ notificationsRouter.post('/reconcile', requireAuth, async (_req: AuthenticatedRe
     await transaction(async () => {
       // 1. Check for resolved undertakings that have existing open notifications -> Suppress
       const resolvedUndertakings = await query<any>(
-        "SELECT id, docket_number FROM undertakings u JOIN applications a ON u.application_id = a.id WHERE u.status = 'VERIFIED_COMPLIANT';"
+        "SELECT u.id, a.docket_number FROM undertakings u JOIN applications a ON u.application_id = a.id WHERE u.status = 'VERIFIED_COMPLIANT';"
       );
 
       for (const u of resolvedUndertakings) {
@@ -60,7 +60,7 @@ notificationsRouter.post('/reconcile', requireAuth, async (_req: AuthenticatedRe
         }
       }
 
-      // 2. Check for overdue undertakings
+      // 2. Check for overdue undertakings and reconcile escalation jobs
       const overdueUndertakings = await query<any>(
         `SELECT u.*, a.docket_number, i.contact_email, i.name as institution_name
          FROM undertakings u
@@ -73,7 +73,7 @@ notificationsRouter.post('/reconcile', requireAuth, async (_req: AuthenticatedRe
       for (const u of overdueUndertakings) {
         const idempKey = `IDEMP-ESC-L2-${u.id}-${u.due_date}`;
         const existing = await queryOne<any>(
-          'SELECT id FROM notifications WHERE idempotency_key = ?;',
+          'SELECT id, attempt_count FROM notifications WHERE idempotency_key = ?;',
           [idempKey]
         );
 
@@ -90,9 +90,9 @@ notificationsRouter.post('/reconcile', requireAuth, async (_req: AuthenticatedRe
               u.docket_number,
               'REGIONAL_OFFICER',
               'ro.western@aicte.gov.in',
-              `ESCALATION LEVEL 2: Breach of Statutory Deadline for ${u.title}`,
-              `Statutory undertaking '${u.title}' for docket ${u.docket_number} is overdue past ${u.due_date}. Auto-escalating to Regional Officer.`,
-              'EMAIL_SIMULATED',
+              `[SIMULATED] ESCALATION LEVEL 2: Breach of Statutory Deadline for ${u.title}`,
+              `Statutory undertaking '${u.title}' for docket ${u.docket_number} is overdue past ${u.due_date}. Auto-escalated to Regional Director.`,
+              'SIMULATED_NIC_EMAIL',
               new Date().toISOString(),
               'SENT_SIMULATED',
               'LEVEL_2_RO',
@@ -101,15 +101,27 @@ notificationsRouter.post('/reconcile', requireAuth, async (_req: AuthenticatedRe
             ]
           );
           createdCount++;
+        } else {
+          // Idempotent retry / heartbeat update on existing open alert
+          await execute(
+            'UPDATE notifications SET attempt_count = attempt_count + 1, last_attempt_at = ? WHERE id = ?;',
+            [new Date().toISOString(), existing.id]
+          );
         }
       }
     });
 
+    const activeCount = await queryOne<{ count: number }>(
+      "SELECT count(*) as count FROM notifications WHERE obligation_still_open = 1 AND status != 'SUPPRESSED_RESOLVED';"
+    );
+
     res.json({
       success: true,
-      message: 'Notification queue reconciled idempotently.',
+      message: 'Notification queue reconciled idempotently with duplicate suppression.',
       newAlertsCreated: createdCount,
       alertsSuppressed: suppressedCount,
+      activeOpenAlertsCount: activeCount?.count ?? 0,
+      deliveryAdapter: 'SIMULATED_NIC_SMTP_GATEWAY',
     });
   } catch (err: any) {
     res.status(500).json({ error: 'Reconciliation failed', details: err.message });

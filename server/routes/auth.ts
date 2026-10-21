@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { query, queryOne } from '../db/database';
-import { generateToken, requireAuth, AuthenticatedRequest } from '../middleware/auth';
+import { generateToken, requireAuth, AuthenticatedRequest, revokeToken } from '../middleware/auth';
 
 export const authRouter = Router();
 
@@ -63,6 +63,16 @@ authRouter.post('/login', async (req, res: Response) => {
 // GET /api/auth/me
 authRouter.get('/me', requireAuth, (req: AuthenticatedRequest, res: Response) => {
   res.json({ user: req.user });
+});
+
+// POST /api/auth/logout
+authRouter.post('/logout', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    revokeToken(token);
+  }
+  res.json({ success: true, message: 'Session logged out and token revoked successfully.' });
 });
 
 // GET /api/auth/users (for demo role switching)

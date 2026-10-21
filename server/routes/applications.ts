@@ -494,6 +494,14 @@ applicationsRouter.post('/:id/transition', requireAuth, async (req: Authenticate
     const actionDesc = observations || `Transitioned from ${app.current_stage} to ${targetStage} by ${user.name} (${user.role})`;
 
     const updatedApp = await transaction(async () => {
+      // Re-query within transaction lock for optimistic concurrency control
+      const freshCheck = await queryOne<ApplicationRow>('SELECT current_stage FROM applications WHERE id = ?;', [app.id]);
+      if (!freshCheck || freshCheck.current_stage !== app.current_stage) {
+        const conflictErr = new Error(`CONCURRENT_CONFLICT: Application stage was modified concurrently to '${freshCheck?.current_stage}'. Request rejected.`);
+        (conflictErr as any).status = 409;
+        throw conflictErr;
+      }
+
       await execute(
         `UPDATE applications 
          SET current_stage = ?, last_action = ?, last_action_timestamp = ?, rule_version = ?
@@ -531,7 +539,8 @@ applicationsRouter.post('/:id/transition', requireAuth, async (req: Authenticate
       transition: updatedApp,
     });
   } catch (err: any) {
-    res.status(500).json({ error: 'Transition failed', details: err.message });
+    const statusCode = err.status || 500;
+    res.status(statusCode).json({ error: 'Transition failed', details: err.message });
   }
 });
 

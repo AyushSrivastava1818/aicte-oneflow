@@ -3,6 +3,28 @@ import jwt from 'jsonwebtoken';
 import { Role } from '../../src/types';
 
 export const JWT_SECRET = process.env.JWT_SECRET || 'aicte_oneflow_sec_jwt_key_sih2026_dev_only';
+export const JWT_ISSUER = 'aicte-oneflow';
+export const JWT_AUDIENCE = 'aicte-oneflow-api';
+
+// Fail fast in production if an insecure default secret is left configured
+if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'aicte_oneflow_sec_jwt_key_sih2026_dev_only')) {
+  throw new Error('FATAL SECURITY ERROR: process.env.JWT_SECRET must be explicitly configured with a strong secret in production.');
+}
+
+// In-memory token revocation registry (for logout and revoked sessions)
+const revokedTokens = new Set<string>();
+
+export function revokeToken(token: string): void {
+  revokedTokens.add(token);
+}
+
+export function isTokenRevoked(token: string): boolean {
+  return revokedTokens.has(token);
+}
+
+export function clearRevokedTokens(): void {
+  revokedTokens.clear();
+}
 
 export interface AuthUser {
   id: string;
@@ -17,7 +39,9 @@ export interface AuthenticatedRequest extends Request {
   user?: AuthUser;
 }
 
-export function generateToken(user: AuthUser): string {
+import crypto from 'crypto';
+
+export function generateToken(user: AuthUser, expiresIn: string | number = '12h'): string {
   return jwt.sign(
     {
       id: user.id,
@@ -26,30 +50,68 @@ export function generateToken(user: AuthUser): string {
       role: user.role,
       regionScope: user.regionScope,
       institutionId: user.institutionId,
+      jti: crypto.randomUUID(),
     },
     JWT_SECRET,
-    { expiresIn: '12h' }
+    {
+      expiresIn: expiresIn as any,
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    }
   );
 }
+
+const VALID_ROLES: Role[] = [
+  'CENTRAL_ADMIN',
+  'REGIONAL_OFFICER',
+  'SCRUTINY_OFFICER',
+  'EVC_COORDINATOR',
+  'INSTITUTION_REP',
+  'STATUTORY_AUDITOR',
+];
 
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
   const simulatedRoleHeader = req.headers['x-simulated-role'] as string | undefined;
 
+  // 1. Verify Bearer token first
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
+
+    if (isTokenRevoked(token)) {
+      res.status(401).json({ error: 'Authorization token has been revoked / logged out.' });
+      return;
+    }
+
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
+      const decoded = jwt.verify(token, JWT_SECRET, {
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE,
+      }) as AuthUser;
       req.user = decoded;
       return next();
     } catch (_err) {
-      res.status(401).json({ error: 'Invalid or expired authorization token' });
+      res.status(401).json({ error: 'Invalid, signature-mismatched, or expired authorization token' });
       return;
     }
   }
 
-  // Developer / Demo role simulation header fallback
+  // 2. Controlled developer/test simulated role fallback (strictly disabled in production)
   if (simulatedRoleHeader) {
+    if (process.env.NODE_ENV === 'production') {
+      res.status(403).json({
+        error: 'Security Violation: Simulated persona headers are strictly prohibited in production environment.',
+      });
+      return;
+    }
+
+    if (!VALID_ROLES.includes(simulatedRoleHeader as Role)) {
+      res.status(400).json({
+        error: `Invalid simulated role '${simulatedRoleHeader}'. Permitted: ${VALID_ROLES.join(', ')}`,
+      });
+      return;
+    }
+
     req.user = {
       id: `sim-${simulatedRoleHeader.toLowerCase()}`,
       email: `${simulatedRoleHeader.toLowerCase()}@aicte-sim.gov.in`,

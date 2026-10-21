@@ -107,6 +107,34 @@ auditRouter.get('/verify', requireAuth, async (_req: AuthenticatedRequest, res: 
         return;
       }
 
+      // Cross-verify canonical payload content against table columns
+      try {
+        const parsed = JSON.parse(block.canonical_payload);
+        if (
+          parsed.reasonOrObservations !== block.reason_or_observations ||
+          parsed.docketNumber !== block.docket_number ||
+          parsed.newStage !== block.new_stage
+        ) {
+          res.status(400).json({
+            isValid: false,
+            verifiedBlocks: i,
+            failureAtBlock: block.block_height,
+            reason: `Data tampering detected at block height ${block.block_height}. Row values diverge from immutable canonical payload!`,
+            verificationTimestamp: new Date().toISOString(),
+          });
+          return;
+        }
+      } catch {
+        res.status(400).json({
+          isValid: false,
+          verifiedBlocks: i,
+          failureAtBlock: block.block_height,
+          reason: `Corrupted canonical payload JSON at block height ${block.block_height}.`,
+          verificationTimestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
       // Recompute SHA-256 from canonical payload
       const calculatedHash = computeSha256(block.canonical_payload);
       if (calculatedHash !== block.current_hash) {
@@ -129,6 +157,8 @@ auditRouter.get('/verify', requireAuth, async (_req: AuthenticatedRequest, res: 
       isValid: true,
       verifiedBlocks: blocks.length,
       rootHash: tipHash,
+      cryptographicModel: 'SHA-256 Hash Chained Event Log (Canonical JSON RFC 8785 aligned)',
+      securityDisclosure: 'Verification validates sequential link continuity and cryptographic digests from Genesis Block. Non-repudiation against direct database file overwrite requires external checkpoint anchoring.',
       message: `Complete cryptographic integrity confirmed across all ${blocks.length} blocks. Zero mutations detected.`,
       verificationTimestamp: new Date().toISOString(),
     });
