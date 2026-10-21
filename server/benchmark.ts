@@ -95,8 +95,12 @@ async function runBenchmark(): Promise<void> {
   let status4xxClientErrors = 0;
   let status5xxServerErrors = 0;
   let networkErrors = 0;
-  let completed = 0;
+  const endpointCounts: Record<string, number> = {};
+  for (const ep of endpoints) {
+    endpointCounts[`${ep.method} ${ep.path}`] = 0;
+  }
 
+  let completed = 0;
   const startTime = performance.now();
 
   async function worker() {
@@ -115,6 +119,8 @@ async function runBenchmark(): Promise<void> {
           break;
         }
       }
+
+      endpointCounts[`${selected.method} ${selected.path}`]++;
 
       const res = await makeRequest({
         hostname: 'localhost',
@@ -208,6 +214,11 @@ async function runBenchmark(): Promise<void> {
   console.log(`Server Errors                : ${metrics.status5xxServerErrors} (${serverErrRate}%) [HTTP 5xx]`);
   console.log(`Network / Timeout Failures   : ${metrics.networkErrors}`);
   console.log(`Authoritative Database Size  : ${(metrics.dbSizeBytes / 1024).toFixed(1)} KB`);
+  console.log('----------------------------------------------------------------');
+  console.log('Workload Distribution by Endpoint:');
+  for (const [epName, count] of Object.entries(endpointCounts)) {
+    console.log(`  - ${epName.padEnd(35)} : ${count} requests (${((count / metrics.totalRequests) * 100).toFixed(1)}%)`);
+  }
   console.log('================================================================\n');
 }
 

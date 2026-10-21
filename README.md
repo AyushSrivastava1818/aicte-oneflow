@@ -415,6 +415,22 @@ AICTE OneFlow enforces server-side identity and authorization across 6 distinct 
 - Node.js (v18.0 or higher, tested on v24.18)
 - npm (v9.0 or higher)
 
+### Seeded Demo Personas & Credentials (Synthetic Sandbox)
+All seeded personas are pre-configured in `server/db/seed.ts` with the password: **`Password@123`**
+
+| Role | Name & Designation | Email Login | Jurisdiction / Scope |
+|---|---|---|---|
+| **`CENTRAL_ADMIN`** | Member Secretary AICTE HQ | `admin@aicte.gov.in` | National (All Regions) |
+| **`REGIONAL_OFFICER`** | Smt. Anjali Deshmukh (RO Western) | `ro.west@aicte.gov.in` | Western Region (Maharashtra & Goa) |
+| **`REGIONAL_OFFICER`** | Regional Director (Northern) | `ro.north@aicte.gov.in` | Northern Region |
+| **`SCRUTINY_OFFICER`** | Dr. Rameshwar Nath (Bureau Desk 3) | `scrutiny.officer@aicte.gov.in` | Northern Technical Scrutiny |
+| **`EVC_COORDINATOR`** | Shri B. K. Venkatesh (EVC Desk SW) | `evc.coord@aicte.gov.in` | South-Western EVC Allocation |
+| **`INSTITUTION_REP`** | Prof. Suresh K. Patil (Principal) | `principal@spcemt.edu` | Sardar Patel College (`inst-02`, Western) |
+| **`INSTITUTION_REP`** | Dr. Vivek Sharma (Registrar) | `registrar@apex.edu` | Apex Institute (`inst-01`, Northern) |
+| **`STATUTORY_AUDITOR`** | Central Vigilance Directorate Auditor | `auditor@cag.gov.in` | National Read-Only Oversight |
+
+*Note: In production mode (`NODE_ENV=production`), simulated header role switching is automatically disabled, requiring authenticated JWT Bearer sessions.*
+
 ### Setup & Local Execution
 ```bash
 # 1. Clone the repository
@@ -427,7 +443,7 @@ npm install
 # 3. Seed the SQLite database with pristine baseline records
 npm run seed
 
-# 4. Run the complete automated test suite (41 tests across 5 test suites)
+# 4. Run the complete automated test suite (46 tests across 5 test suites)
 npm test
 
 # 5. Run the static code linter (oxlint: 0 errors, 0 warnings)

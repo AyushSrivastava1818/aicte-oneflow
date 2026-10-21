@@ -126,6 +126,32 @@ describe('AICTE OneFlow Relational Backend & Security Hardening Suite', () => {
       expect(afterRes.status).toBe(401);
       expect(afterRes.body.error).toContain('revoked');
     });
+
+    it('Should reject simulated role headers when NODE_ENV is production', async () => {
+      const prevEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      try {
+        const res = await request(app)
+          .get('/api/applications')
+          .set('x-simulated-role', 'CENTRAL_ADMIN');
+        expect(res.status).toBe(403);
+        expect(res.body.error).toContain('prohibited in production');
+      } finally {
+        process.env.NODE_ENV = prevEnv;
+      }
+    });
+
+    it('Should reject GET /api/auth/users in production mode', async () => {
+      const prevEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      try {
+        const res = await request(app).get('/api/auth/users');
+        expect(res.status).toBe(403);
+        expect(res.body.error).toContain('disabled in production');
+      } finally {
+        process.env.NODE_ENV = prevEnv;
+      }
+    });
   });
 
   describe('3. Regional Scoping & Institutional IDOR Protections', () => {
