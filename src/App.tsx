@@ -94,7 +94,36 @@ export function App() {
   };
 
   useEffect(() => {
-    refreshAllFromBackend(currentRole);
+    let isMounted = true;
+    void (async () => {
+      try {
+        const [apps, evc, und, docs, notifs, audit] = await Promise.all([
+          apiClient.getApplications(currentRole),
+          apiClient.getEVCRecords(currentRole),
+          apiClient.getUndertakings(currentRole),
+          apiClient.getDocuments(currentRole),
+          apiClient.getNotifications(currentRole),
+          apiClient.getAuditLogs(currentRole),
+        ]);
+        if (isMounted) {
+          setApplications(apps);
+          setEvcRecords(evc);
+          setUndertakings(und);
+          setDocuments(docs);
+          setNotifications(notifs);
+          setAuditLogs(audit);
+          setBackendConnected(true);
+        }
+      } catch (err: any) {
+        console.warn('Backend fetch failed or offline, using cached state:', err);
+        if (isMounted) {
+          setBackendConnected(false);
+        }
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
   }, [currentRole]);
 
   // Sync to localStorage as client cache

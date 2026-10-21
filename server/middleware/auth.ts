@@ -90,7 +90,7 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
       }) as AuthUser;
       req.user = decoded;
       return next();
-    } catch (_err) {
+    } catch {
       res.status(401).json({ error: 'Invalid, signature-mismatched, or expired authorization token' });
       return;
     }

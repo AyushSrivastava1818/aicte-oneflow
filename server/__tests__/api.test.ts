@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import { createApp } from '../app';
 import { seedDatabase } from '../db/seed';
 import { setDatabasePath, getDbFilePath, execute, query, transaction } from '../db/database';
-import { JWT_SECRET, JWT_ISSUER, JWT_AUDIENCE, clearRevokedTokens } from '../middleware/auth';
+import { JWT_SECRET, JWT_ISSUER, JWT_AUDIENCE, clearRevokedTokens, generateToken } from '../middleware/auth';
 
 describe('AICTE OneFlow Relational Backend & Security Hardening Suite', () => {
   const app = createApp();
@@ -189,6 +189,60 @@ describe('AICTE OneFlow Relational Backend & Security Hardening Suite', () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toContain('Mandatory prerequisites not satisfied');
       expect(res.body.missingPrerequisites.length).toBeGreaterThan(0);
+    });
+
+    it('GET /api/applications/:id should return complete 18-attribute authoritative domain model for next action', async () => {
+      const res = await request(app)
+        .get('/api/applications/app-101')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+      const ledger = res.body.nextActionLedger;
+      expect(ledger.actionId).toBeDefined();
+      expect(ledger.category).toBeDefined();
+      expect(ledger.status).toBeDefined();
+      expect(ledger.ruleReference).toBe('RULE-APH-DEFICIENCY-02');
+      expect(ledger.sourceDocument).toContain('AICTE Approval Process Handbook');
+      expect(ledger.sectionClause).toBe('Chapter II, Clause 2.4(a)');
+      expect(ledger.ruleVerificationStatus).toBe('VERIFIED_OFFICIAL_REGULATION');
+      expect(ledger.generatedBy).toBe('DETERMINISTIC_WORKFLOW_POLICY');
+      expect(ledger.availabilityRationale).toBeDefined();
+      expect(ledger.completionImpact).toBeDefined();
+      expect(Array.isArray(ledger.prerequisites)).toBe(true);
+      expect(Array.isArray(ledger.blockingConditions)).toBe(true);
+    });
+
+    it('POST /api/applications/:id/transition should reject Statutory Auditor with 403 (read-only)', async () => {
+      const auditorToken = generateToken({
+        id: 'usr-auditor-test',
+        email: 'auditor@cag.gov.in',
+        name: 'Vigilance Auditor',
+        role: 'STATUTORY_AUDITOR',
+        regionScope: null,
+        institutionId: null,
+      });
+
+      const res = await request(app)
+        .post('/api/applications/app-101/transition')
+        .set('Authorization', `Bearer ${auditorToken}`)
+        .send({
+          targetStage: 'UNDER_SCRUTINY',
+          observations: 'Auditor unauthorized mutation attempt',
+        });
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain('Statutory Auditor has read-only oversight permissions');
+    });
+
+    it('POST /api/applications/:id/transition should block APPROVED_UNCONDITIONAL if active undertakings remain', async () => {
+      // app-102 has pending undertakings (und-501)
+      const res = await request(app)
+        .post('/api/applications/app-102/transition')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          targetStage: 'APPROVED_UNCONDITIONAL',
+          observations: 'Attempting unconditional seal with pending undertaking',
+        });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('time-bound conditional undertakings must be verified compliant');
     });
 
     it('POST /api/applications/:id/transition should execute valid transition and commit SHA-256 block', async () => {

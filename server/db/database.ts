@@ -75,7 +75,7 @@ export function persistToDisk(database: SqlJsDatabase): void {
   fs.writeFileSync(tempPath, Buffer.from(data));
   try {
     fs.renameSync(tempPath, targetPath);
-  } catch (_err) {
+  } catch {
     // Fallback if cross-device or permission lock
     fs.copyFileSync(tempPath, targetPath);
     try { fs.unlinkSync(tempPath); } catch {}

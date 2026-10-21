@@ -48,174 +48,667 @@ interface DeficiencyRow {
   resolution_note: string | null;
 }
 
+// Authoritative Explainable Next Action Domain Model
+export interface AuthoritativeCaseAction {
+  actionId: string;
+  applicationId: string;
+  docketNumber: string;
+  actionTitle: string;
+  nextAction: string; // compatibility alias
+  whyRequired: string;
+  why: string; // compatibility alias
+  category: 'REGULATORY_SCRUTINY' | 'DEFICIENCY_REMEDIATION' | 'EVC_INSPECTION' | 'APPELLATE_REVIEW' | 'COUNCIL_SANCTION' | 'POST_APPROVAL_MONITORING' | 'EXCEPTION_QUEUE';
+  status: 'ACTIONABLE' | 'BLOCKED' | 'WAITING_EXTERNAL' | 'COMPLETED' | 'TERMINAL_APPEAL' | 'DIAGNOSTIC_EXCEPTION';
+  responsibleRole: string;
+  assignedOfficer: string;
+  dueDateTime: string;
+  deadline: string; // compatibility alias
+  deadlineType: string;
+  deadlineCalculationBasis: string;
+  ruleReference: string;
+  ruleSource: string; // compatibility alias
+  sourceDocument: string;
+  sectionClause: string;
+  ruleVersion: string;
+  ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION' | 'CONFIGURED_DEMO_RULE' | 'UNVERIFIED_HUMAN_REVIEW_REQUIRED';
+  prerequisites: Array<{
+    id: string;
+    name: string;
+    clauseReference: string;
+    satisfied: boolean;
+    blockerDetail?: string;
+  }>;
+  missingPrerequisites: string[];
+  blockingConditions: string[];
+  evidenceRequired: string[];
+  evidenceSubmitted: Array<{
+    name: string;
+    type: string;
+    status: 'VERIFIED_GENUINE' | 'PENDING_OFFICER_REVIEW' | 'RETURNED_DEFICIENT';
+    notes?: string;
+  }>;
+  permittedNextStages: string[];
+  generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY';
+  availabilityRationale: string;
+  completionImpact: string;
+}
+
 // Compute Explainable Next Action Ledger server-side
-function calculateNextAction(app: ApplicationRow, deficiencies: DeficiencyRow[]) {
+function calculateNextAction(app: ApplicationRow, deficiencies: DeficiencyRow[]): AuthoritativeCaseAction {
   const unresolvedDeficiencies = deficiencies.filter((d) => d.resolved === 0);
+
+  // Common statutory prerequisites
+  const basePrereqs = [
+    {
+      id: 'prereq-trust-deed',
+      name: 'Registered Trust / Society Deed Validity',
+      clauseReference: 'APH Chapter I, Clause 1.4(a)',
+      satisfied: app.trust_deed_valid === 1,
+      blockerDetail: app.trust_deed_valid === 1 ? undefined : 'Trust/Society registration deed renewal or certification is pending.',
+    },
+    {
+      id: 'prereq-fire-noc',
+      name: 'State Fire Services Final NOC',
+      clauseReference: 'APH Chapter IV, Clause 4.12(b)',
+      satisfied: app.fire_noc_valid === 1,
+      blockerDetail: app.fire_noc_valid === 1 ? undefined : 'Fire & Life Safety NOC missing or issued under provisional municipal authority.',
+    },
+    {
+      id: 'prereq-building-plan',
+      name: 'Municipal Approved Building & Occupancy Plan',
+      clauseReference: 'APH Chapter III, Clause 3.8',
+      satisfied: app.building_plan_valid === 1,
+      blockerDetail: app.building_plan_valid === 1 ? undefined : 'Sanctioned architectural building plan or occupancy certificate pending.',
+    },
+    {
+      id: 'prereq-scrutiny-deficiencies',
+      name: 'Zero Critical Deficiencies on Observation Checklist',
+      clauseReference: 'APH Chapter II, Clause 2.3 & Form 15',
+      satisfied: unresolvedDeficiencies.length === 0,
+      blockerDetail: unresolvedDeficiencies.length > 0 ? `${unresolvedDeficiencies.length} unresolved deficiency(ies) require institutional rectification.` : undefined,
+    },
+  ];
+
+  const activeBlockers = basePrereqs.filter((p) => !p.satisfied && p.blockerDetail).map((p) => p.blockerDetail!);
+
+  const baseEvidence = [
+    {
+      name: 'Registered 30-Year Land Lease / Sale Deed',
+      type: 'Land & Building Title',
+      status: (app.trust_deed_valid === 1 ? 'VERIFIED_GENUINE' : 'PENDING_OFFICER_REVIEW') as any,
+      notes: app.trust_deed_valid === 1 ? 'Verified against state land registry.' : 'Awaiting sub-registrar authentication.',
+    },
+    {
+      name: 'State Fire Services Certificate',
+      type: 'Life & Fire Safety',
+      status: (app.fire_noc_valid === 1 ? 'VERIFIED_GENUINE' : 'RETURNED_DEFICIENT') as any,
+      notes: app.fire_noc_valid === 1 ? 'Compliant with National Building Code Part IV.' : 'Provisional NOC rejected. Final certificate required.',
+    },
+    {
+      name: 'Approved Structural Soundness & Occupancy Plan',
+      type: 'Civil Infrastructure',
+      status: (app.building_plan_valid === 1 ? 'VERIFIED_GENUINE' : 'PENDING_OFFICER_REVIEW') as any,
+    },
+  ];
+
+  const actionId = `ACT-${app.docket_number}-${app.current_stage}`;
 
   switch (app.current_stage) {
     case 'SUBMITTED':
+    case 'APPLICATION_SUBMITTED':
       return {
-        nextAction: 'Initiate Scrutiny Verification',
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Assign Bureau Scrutiny Officer & Verify Initial Docket Uploads',
+        nextAction: 'Assign Bureau Scrutiny Officer & Verify Initial Docket Uploads',
+        whyRequired: 'New docket registered in portal. Form 15 preliminary scrutiny must be initiated to verify statutory uploads against APH norms.',
         why: 'Docket submitted by institution requires formal verification of land deeds, fire NOC, and building approval against APH norms.',
-        responsibleRole: 'SCRUTINY_OFFICER',
-        assignedOfficer: app.assigned_officer,
+        category: 'REGULATORY_SCRUTINY',
+        status: 'ACTIONABLE',
+        responsibleRole: 'REGIONAL_OFFICER',
+        assignedOfficer: app.assigned_officer || 'Regional Director / Desk Officer',
+        dueDateTime: app.sla_deadline,
         deadline: app.sla_deadline,
-        deadlineType: app.deadline_type,
-        deadlineCalculationBasis: app.deadline_calculation_basis,
+        deadlineType: app.deadline_type || 'INTERNAL_SERVICE_TARGET',
+        deadlineCalculationBasis: app.deadline_calculation_basis || '14 calendar days from docket intake under APH Clause 2.3.1',
+        ruleReference: 'RULE-APH-SCRUTINY-01',
         ruleSource: 'RULE-APH-SCRUTINY-01 (APH Ch. II, Cl. 2.3.1)',
+        sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+        sectionClause: 'Chapter II, Clause 2.3.1',
         ruleVersion: app.rule_version,
+        ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+        prerequisites: basePrereqs,
         missingPrerequisites: [],
-        permittedNextStages: ['UNDER_SCRUTINY', 'RETURNED_FOR_DEFICIENCY'],
+        blockingConditions: [],
+        evidenceRequired: ['Registered 30-Year Land Lease / Title Deed', 'State Fire Safety Final NOC', 'Approved Architectural Building Plan'],
+        evidenceSubmitted: baseEvidence,
+        permittedNextStages: ['UNDER_SCRUTINY', 'SCRUTINY_DEFICIENCY_RAISED'],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: 'Initial intake completed. Docket is ready for desk assignment.',
+        completionImpact: 'Transitions docket to active Technical Scrutiny (Form 15 checklist verification).',
       };
 
     case 'UNDER_SCRUTINY':
       if (unresolvedDeficiencies.length > 0) {
         return {
+          actionId,
+          applicationId: app.id,
+          docketNumber: app.docket_number,
+          actionTitle: 'Issue Formal Form 17 Deficiency Memorandum',
           nextAction: 'Issue Formal Form 17 Deficiency Memo',
+          whyRequired: `Scrutiny Committee flagged ${unresolvedDeficiencies.length} statutory deficiency(ies). Application must be returned for institutional cure.`,
           why: `Scrutiny Committee flagged ${unresolvedDeficiencies.length} statutory deficiency(ies). Application must be returned for institutional cure.`,
+          category: 'DEFICIENCY_REMEDIATION',
+          status: 'BLOCKED',
           responsibleRole: 'SCRUTINY_OFFICER',
           assignedOfficer: app.assigned_officer,
+          dueDateTime: app.sla_deadline,
           deadline: app.sla_deadline,
           deadlineType: 'STATUTORY_MANDATE',
           deadlineCalculationBasis: '10 calendar days rectification window as per APH Clause 2.4(a)',
+          ruleReference: 'RULE-APH-DEFICIENCY-02',
           ruleSource: 'RULE-APH-DEFICIENCY-02 (APH Ch. II, Cl. 2.4(a))',
+          sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+          sectionClause: 'Chapter II, Clause 2.4(a)',
           ruleVersion: app.rule_version,
+          ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+          prerequisites: basePrereqs,
           missingPrerequisites: unresolvedDeficiencies.map((d) => `${d.clause}: ${d.description}`),
+          blockingConditions: activeBlockers,
+          evidenceRequired: unresolvedDeficiencies.map((d) => `Rectification proof for ${d.clause}`),
+          evidenceSubmitted: baseEvidence,
           permittedNextStages: ['SCRUTINY_DEFICIENCY_RAISED'],
+          generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+          availabilityRationale: 'Open deficiencies prevent certification of scrutiny clearance.',
+          completionImpact: 'Issues Form 17 memorandum to institution and opens statutory 10-day rectification window.',
         };
       }
       return {
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Certify Scrutiny Cleared (Checklist Form 15 Sign-off)',
         nextAction: 'Recommend Clearance to Regional Committee',
+        whyRequired: 'All statutory title deeds, fire NOCs, and cadral ratios comply with Approval Process Handbook requirements without active deficiencies.',
         why: 'All statutory title deeds, NOCs, and cadral ratios comply with Approval Process Handbook requirements without active deficiencies.',
+        category: 'REGULATORY_SCRUTINY',
+        status: activeBlockers.length > 0 ? 'BLOCKED' : 'ACTIONABLE',
         responsibleRole: 'SCRUTINY_OFFICER',
         assignedOfficer: app.assigned_officer,
+        dueDateTime: app.sla_deadline,
         deadline: app.sla_deadline,
         deadlineType: 'INTERNAL_SERVICE_TARGET',
-        deadlineCalculationBasis: '14 calendar days from docket intake',
+        deadlineCalculationBasis: '14 calendar days from docket intake under APH Clause 2.3.1',
+        ruleReference: 'RULE-APH-SCRUTINY-01',
         ruleSource: 'RULE-APH-SCRUTINY-01 (APH Ch. II, Cl. 2.3.1)',
+        sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+        sectionClause: 'Chapter II, Clause 2.3.1',
         ruleVersion: app.rule_version,
-        missingPrerequisites: [],
+        ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+        prerequisites: basePrereqs,
+        missingPrerequisites: activeBlockers,
+        blockingConditions: activeBlockers,
+        evidenceRequired: ['Form 15 Scrutiny Checklist Sign-off'],
+        evidenceSubmitted: baseEvidence,
         permittedNextStages: ['SCRUTINY_CLEARED', 'SCRUTINY_DEFICIENCY_RAISED'],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: activeBlockers.length === 0 ? 'All statutory checks satisfied with zero open deficiencies.' : 'Blocked by statutory prerequisite deficits.',
+        completionImpact: 'Clears scrutiny phase; advances docket to EVC scheduling or direct approval (EoA route).',
       };
 
     case 'SCRUTINY_DEFICIENCY_RAISED':
       return {
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Institution to Submit Clarifications & Rectification Evidence',
         nextAction: 'Upload Rectification Evidence & Supporting Documents',
+        whyRequired: 'Institution representative must submit rectified documentation for pointed deficiencies before statutory 10-day window expires.',
         why: 'Institution representative must submit rectified documentation for pointed deficiencies before the statutory 10-day window expires.',
+        category: 'DEFICIENCY_REMEDIATION',
+        status: 'WAITING_EXTERNAL',
         responsibleRole: 'INSTITUTION_REP',
-        assignedOfficer: 'Institution Nodal Officer',
+        assignedOfficer: 'Institution Nodal Officer / Registrar',
+        dueDateTime: app.sla_deadline,
         deadline: app.sla_deadline,
         deadlineType: 'STATUTORY_MANDATE',
         deadlineCalculationBasis: 'Statutory 10 calendar days curing window (APH Cl. 2.4)',
+        ruleReference: 'RULE-APH-DEFICIENCY-02',
         ruleSource: 'RULE-APH-DEFICIENCY-02 (APH Ch. II, Cl. 2.4(a))',
+        sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+        sectionClause: 'Chapter II, Clause 2.4(a)',
         ruleVersion: app.rule_version,
-        missingPrerequisites: unresolvedDeficiencies.map((d) => `Awaiting institution fix: ${d.description}`),
-        permittedNextStages: ['UNDER_SCRUTINY'],
+        ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+        prerequisites: basePrereqs,
+        missingPrerequisites: unresolvedDeficiencies.map((d) => `Awaiting institutional rectification: ${d.description}`),
+        blockingConditions: ['Pending institutional upload of compliant certificates'],
+        evidenceRequired: unresolvedDeficiencies.map((d) => `Rectification proof for ${d.clause}`),
+        evidenceSubmitted: baseEvidence,
+        permittedNextStages: ['UNDER_SCRUTINY', 'RE_SCRUTINY'],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: 'Statutory 10-day cure window active for applicant institution.',
+        completionImpact: 'Resubmits cured evidence to Scrutiny Committee for Re-Scrutiny verification.',
+      };
+
+    case 'RE_SCRUTINY':
+      return {
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Evaluate Resubmitted Rectifications & Close Observation Checklist',
+        nextAction: 'Evaluate Resubmitted Rectifications & Close Observation Checklist',
+        whyRequired: 'Institution submitted rectification documents. Scrutiny Committee must re-evaluate compliance before cleared sign-off.',
+        why: 'Institution submitted rectification documents. Scrutiny Committee must re-evaluate compliance before cleared sign-off.',
+        category: 'REGULATORY_SCRUTINY',
+        status: 'ACTIONABLE',
+        responsibleRole: 'SCRUTINY_OFFICER',
+        assignedOfficer: app.assigned_officer,
+        dueDateTime: app.sla_deadline,
+        deadline: app.sla_deadline,
+        deadlineType: 'INTERNAL_SERVICE_TARGET',
+        deadlineCalculationBasis: '7 calendar days re-scrutiny disposal window',
+        ruleReference: 'RULE-APH-SCRUTINY-01',
+        ruleSource: 'RULE-APH-SCRUTINY-01 (APH Ch. II, Cl. 2.3.1)',
+        sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+        sectionClause: 'Chapter II, Clause 2.3.1',
+        ruleVersion: app.rule_version,
+        ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+        prerequisites: basePrereqs,
+        missingPrerequisites: activeBlockers,
+        blockingConditions: activeBlockers,
+        evidenceRequired: ['Rectified certificates verification'],
+        evidenceSubmitted: baseEvidence,
+        permittedNextStages: ['SCRUTINY_CLEARED', 'SCRUTINY_DEFICIENCY_RAISED'],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: 'Institution has uploaded rectifications for re-scrutiny.',
+        completionImpact: 'Closes Form 17 observations and certifies scrutiny clearance.',
       };
 
     case 'SCRUTINY_CLEARED':
+      if (app.route === 'ROUTE_EOA') {
+        return {
+          actionId,
+          applicationId: app.id,
+          docketNumber: app.docket_number,
+          actionTitle: 'Issue Extension of Approval (EoA) Order with Undertaking Register',
+          nextAction: 'Sanction Extension of Approval (EoA)',
+          whyRequired: 'Scrutiny cleared for Extension of Approval. Regional Officer authorized to grant EoA subject to routine undertakings.',
+          why: 'Scrutiny cleared for Extension of Approval. Regional Officer authorized to grant EoA subject to routine undertakings.',
+          category: 'COUNCIL_SANCTION',
+          status: 'ACTIONABLE',
+          responsibleRole: 'REGIONAL_OFFICER',
+          assignedOfficer: 'Regional Director',
+          dueDateTime: app.sla_deadline,
+          deadline: app.sla_deadline,
+          deadlineType: 'INTERNAL_SERVICE_TARGET',
+          deadlineCalculationBasis: '7 calendar days from scrutiny clearance',
+          ruleReference: 'RULE-APH-UNDERTAKINGS-05',
+          ruleSource: 'RULE-APH-UNDERTAKINGS-05 (APH Ch. I, Cl. 1.4(g))',
+          sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+          sectionClause: 'Chapter I, Clause 1.4(g)',
+          ruleVersion: app.rule_version,
+          ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+          prerequisites: basePrereqs,
+          missingPrerequisites: [],
+          blockingConditions: [],
+          evidenceRequired: ['Signed Form 15 Scrutiny Clearance Certificate'],
+          evidenceSubmitted: baseEvidence,
+          permittedNextStages: ['APPROVED_WITH_UNDERTAKINGS', 'APPROVED'],
+          generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+          availabilityRationale: 'EoA route does not require physical EVC inspection.',
+          completionImpact: 'Emits conditional Extension of Approval (EoA) order.',
+        };
+      }
       return {
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Queue for Expert Visit Committee (EVC) Panel Dispatch',
         nextAction: 'Dispatch Expert Visit Committee (EVC) or Advance to EC Review',
+        whyRequired: 'Document scrutiny passed for New Institution / Intake Increase. Route requires peer committee physical or virtual inspection.',
         why: 'Document scrutiny successfully passed. Regional Committee must either schedule physical/virtual EVC or submit direct recommendations to Executive Committee.',
+        category: 'EVC_INSPECTION',
+        status: 'ACTIONABLE',
         responsibleRole: 'REGIONAL_OFFICER',
         assignedOfficer: 'Regional Officer / EVC Desk',
+        dueDateTime: app.sla_deadline,
         deadline: app.sla_deadline,
         deadlineType: 'INTERNAL_SERVICE_TARGET',
         deadlineCalculationBasis: '10 days allocation buffer following scrutiny clearance',
+        ruleReference: 'RULE-APH-EVC-03',
         ruleSource: 'RULE-APH-EVC-03 (APH Ch. II, Cl. 2.5)',
+        sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+        sectionClause: 'Chapter II, Clause 2.5',
         ruleVersion: app.rule_version,
+        ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+        prerequisites: basePrereqs,
         missingPrerequisites: [],
+        blockingConditions: [],
+        evidenceRequired: ['Pre-inspection readiness checklist confirmation'],
+        evidenceSubmitted: baseEvidence,
         permittedNextStages: ['EVC_QUEUED', 'RECOMMENDED_TO_EC'],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: 'Scrutiny cleared. Ready for EVC dispatch.',
+        completionImpact: 'Transfers case to EVC Coordinator queue for panel selection.',
       };
 
     case 'EVC_QUEUED':
       return {
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Constitute Conflict-Free Peer Committee & Schedule Inspection',
         nextAction: 'Conduct Multi-Expert Inspection & Submit Objective Evaluation Report',
+        whyRequired: 'Docket awaiting panel constitution under APH Clause 2.5. Coordinator must evaluate conflict status and readiness checks prior to confirmation.',
         why: 'EVC committee constituted. Experts must conduct physical or virtual verification of infrastructure, labs, and faculty presence.',
+        category: 'EVC_INSPECTION',
+        status: 'ACTIONABLE',
         responsibleRole: 'EVC_COORDINATOR',
         assignedOfficer: 'EVC Desk Coordinator',
+        dueDateTime: app.sla_deadline,
         deadline: app.sla_deadline,
         deadlineType: 'INTERNAL_SERVICE_TARGET',
         deadlineCalculationBasis: '10 calendar days inspection target window',
+        ruleReference: 'RULE-APH-EVC-03',
         ruleSource: 'RULE-APH-EVC-03 (APH Ch. II, Cl. 2.5)',
+        sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+        sectionClause: 'Chapter II, Clause 2.5',
         ruleVersion: app.rule_version,
+        ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+        prerequisites: basePrereqs,
         missingPrerequisites: [],
-        permittedNextStages: ['RECOMMENDED_TO_EC', 'REJECTED_DEFICIENCY'],
+        blockingConditions: [],
+        evidenceRequired: ['Panel expert conflict declarations', 'Readiness checklist (4/4)'],
+        evidenceSubmitted: baseEvidence,
+        permittedNextStages: ['EVC_SCHEDULED', 'RECOMMENDED_TO_EC', 'REJECTED_DEFICIENCY'],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: 'Awaiting expert committee constitution and date fixing.',
+        completionImpact: 'Locks inspection date and notifies empanelled experts and applicant.',
+      };
+
+    case 'EVC_SCHEDULED':
+      return {
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Conduct Multi-Expert Inspection & Upload Inspection Matrix',
+        nextAction: 'Conduct Multi-Expert Inspection & Upload Inspection Matrix',
+        whyRequired: 'Inspection date confirmed. Peer committee to conduct physical/virtual inspection and log outcome recommendations.',
+        why: 'Inspection date confirmed. Peer committee to conduct physical/virtual inspection and log outcome recommendations.',
+        category: 'EVC_INSPECTION',
+        status: 'ACTIONABLE',
+        responsibleRole: 'EVC_COORDINATOR',
+        assignedOfficer: 'EVC Desk Coordinator',
+        dueDateTime: app.sla_deadline,
+        deadline: app.sla_deadline,
+        deadlineType: 'INTERNAL_SERVICE_TARGET',
+        deadlineCalculationBasis: 'Report due within 24 hours of inspection completion',
+        ruleReference: 'RULE-APH-EVC-03',
+        ruleSource: 'RULE-APH-EVC-03 (APH Ch. II, Cl. 2.5)',
+        sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+        sectionClause: 'Chapter II, Clause 2.5',
+        ruleVersion: app.rule_version,
+        ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+        prerequisites: basePrereqs,
+        missingPrerequisites: [],
+        blockingConditions: [],
+        evidenceRequired: ['Geotagged campus photo matrix', 'Signed expert evaluation report'],
+        evidenceSubmitted: baseEvidence,
+        permittedNextStages: ['EVC_COMPLETED', 'RECOMMENDED_TO_EC', 'REJECTED_DEFICIENCY'],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: 'Site inspection date confirmed.',
+        completionImpact: 'Records committee findings and advances docket to Council decision.',
+      };
+
+    case 'EVC_COMPLETED':
+      return {
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Forward EVC Outcome to Executive Committee for Approval Sanction',
+        nextAction: 'Forward EVC Outcome to Executive Committee for Approval Sanction',
+        whyRequired: 'Inspection completed and report received. Case submitted for statutory council sanction.',
+        why: 'Inspection completed and report received. Case submitted for statutory council sanction.',
+        category: 'COUNCIL_SANCTION',
+        status: 'ACTIONABLE',
+        responsibleRole: 'REGIONAL_OFFICER',
+        assignedOfficer: 'Regional Director',
+        dueDateTime: app.sla_deadline,
+        deadline: app.sla_deadline,
+        deadlineType: 'INTERNAL_SERVICE_TARGET',
+        deadlineCalculationBasis: '5 calendar days dispatch buffer',
+        ruleReference: 'RULE-APH-SCRUTINY-01',
+        ruleSource: 'RULE-APH-SCRUTINY-01 (APH Ch. II, Cl. 2.7)',
+        sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+        sectionClause: 'Chapter II, Clause 2.7',
+        ruleVersion: app.rule_version,
+        ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+        prerequisites: basePrereqs,
+        missingPrerequisites: [],
+        blockingConditions: [],
+        evidenceRequired: ['EVC final recommendation dossier'],
+        evidenceSubmitted: baseEvidence,
+        permittedNextStages: ['RECOMMENDED_TO_EC', 'APPROVED_WITH_UNDERTAKINGS', 'APPROVED'],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: 'Committee report signed and uploaded.',
+        completionImpact: 'Places docket before AICTE Executive Committee for approval determination.',
       };
 
     case 'RECOMMENDED_TO_EC':
+    case 'COUNCIL_DECISION_PENDING':
       return {
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Executive Committee Statutory Approval Determination',
         nextAction: 'Executive Committee Statutory Approval Determination',
+        whyRequired: 'Scrutiny and EVC clearance completed. Final statutory grant of Approval (LoA/EoA) or Rejection by Executive Committee.',
         why: 'Scrutiny and EVC clearance completed. Final statutory grant of Approval (LoA/EoA) or Rejection by Executive Committee.',
+        category: 'COUNCIL_SANCTION',
+        status: 'ACTIONABLE',
         responsibleRole: 'CENTRAL_ADMIN',
         assignedOfficer: 'AICTE Executive Committee / Member Secretary',
+        dueDateTime: app.sla_deadline,
         deadline: app.sla_deadline,
         deadlineType: 'STATUTORY_MANDATE',
         deadlineCalculationBasis: 'APH statutory final determination timeline (APH Clause 2.7)',
+        ruleReference: 'RULE-APH-SAC-APPEAL-04',
         ruleSource: 'RULE-APH-SAC-APPEAL-04 (APH Ch. II, Cl. 2.7)',
+        sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+        sectionClause: 'Chapter II, Clause 2.7',
         ruleVersion: app.rule_version,
+        ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+        prerequisites: basePrereqs,
         missingPrerequisites: [],
-        permittedNextStages: ['APPROVED', 'REJECTED_DEFICIENCY', 'SAC_SHC_REVIEW'],
+        blockingConditions: [],
+        evidenceRequired: ['Executive Committee resolution sign-off'],
+        evidenceSubmitted: baseEvidence,
+        permittedNextStages: ['APPROVED', 'APPROVED_WITH_UNDERTAKINGS', 'REJECTED_DEFICIENCY', 'SAC_SHC_REVIEW'],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: 'Scrutiny and inspection clearances complete. Awaiting council determination.',
+        completionImpact: 'Generates official Letter of Approval (LoA) or speaking rejection order.',
       };
 
-    case 'APPROVED':
+    case 'APPROVED_WITH_UNDERTAKINGS':
       return {
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Monitor Active Time-Bound Undertakings & Lease Expiry Radar',
         nextAction: 'Monitor Post-Approval Compliance & Renewal Radars',
+        whyRequired: 'Statutory approval issued subject to post-approval obligations under APH Clause 1.4(g) & 7.4. Surveillance radar active.',
         why: 'Statutory approval issued. Continuous tracking of land lease, building stability, fire NOC, and cadre compliance undertakings is now active.',
-        responsibleRole: 'CENTRAL_ADMIN',
+        category: 'POST_APPROVAL_MONITORING',
+        status: 'COMPLETED',
+        responsibleRole: 'REGIONAL_OFFICER',
         assignedOfficer: 'Compliance Bureau Desk',
+        dueDateTime: app.sla_deadline,
         deadline: 'Active Monitoring Cycle',
         deadlineType: 'INTERNAL_SERVICE_TARGET',
         deadlineCalculationBasis: 'Continuous compliance tracking under Chapter VII',
+        ruleReference: 'RULE-APH-UNDERTAKINGS-05',
         ruleSource: 'RULE-APH-UNDERTAKINGS-05 (APH Ch. VII, Cl. 7.1)',
+        sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+        sectionClause: 'Chapter VII, Clause 7.1',
         ruleVersion: app.rule_version,
+        ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+        prerequisites: [
+          ...basePrereqs,
+          {
+            id: 'prereq-undertakings-fulfilled',
+            name: 'Time-Bound Compliance Undertakings Certified',
+            clauseReference: 'APH Chapter I, Clause 1.4(g) & 7.4',
+            satisfied: app.has_pending_undertakings === 0,
+            blockerDetail: app.has_pending_undertakings === 1 ? 'Active post-approval undertakings under statutory monitoring window.' : undefined,
+          },
+        ],
         missingPrerequisites: [],
-        permittedNextStages: [],
+        blockingConditions: [],
+        evidenceRequired: ['Annual institutional compliance return'],
+        evidenceSubmitted: baseEvidence,
+        permittedNextStages: ['APPROVED_UNCONDITIONAL'],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: 'Approval sanctioned conditionally. Ongoing surveillance active.',
+        completionImpact: 'All conditional undertakings fulfilled; advances to final unconditional seal.',
       };
 
+    case 'APPROVED':
+    case 'APPROVED_UNCONDITIONAL':
+      return {
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Formal AICTE Approval Order Emitted & Institutional Archive Sealed',
+        nextAction: 'Formal AICTE Approval Order Emitted & Institutional Archive Sealed',
+        whyRequired: 'Statutory approval granted unconditionally. All compliance requirements fulfilled.',
+        why: 'Statutory approval granted unconditionally. All compliance requirements fulfilled.',
+        category: 'POST_APPROVAL_MONITORING',
+        status: 'COMPLETED',
+        responsibleRole: 'CENTRAL_ADMIN',
+        assignedOfficer: 'Member Secretary AICTE HQ',
+        dueDateTime: 'Compliant & Sealed',
+        deadline: 'Compliant & Sealed',
+        deadlineType: 'INTERNAL_SERVICE_TARGET',
+        deadlineCalculationBasis: 'Closed case dossier archive',
+        ruleReference: 'RULE-APH-UNDERTAKINGS-05',
+        ruleSource: 'RULE-APH-UNDERTAKINGS-05 (APH Ch. VII, Cl. 7.1)',
+        sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+        sectionClause: 'Chapter VII, Clause 7.1',
+        ruleVersion: app.rule_version,
+        ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+        prerequisites: basePrereqs,
+        missingPrerequisites: [],
+        blockingConditions: [],
+        evidenceRequired: [],
+        evidenceSubmitted: baseEvidence,
+        permittedNextStages: [],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: 'All statutory requirements completely satisfied and sealed.',
+        completionImpact: 'Dossier archived for statutory inspection by Central Vigilance Commission (CVC) and CAG.',
+      };
+
+    case 'REJECTED':
     case 'REJECTED_DEFICIENCY':
       return {
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Speaking Order Issued; 15-day Statutory Appellate Window to SAC Active',
         nextAction: 'File Statutory Appeal to Standing Appellate Committee (SAC)',
+        whyRequired: 'Statutory grant declined due to uncured deficiencies. Institution may invoke statutory appeal within 15 calendar days under APH Clause 2.8.',
         why: 'Statutory grant declined due to uncured deficiencies. Institution may invoke statutory appeal within 15 calendar days.',
+        category: 'STATUTORY_APPEAL',
+        status: 'TERMINAL_APPEAL',
         responsibleRole: 'INSTITUTION_REP',
         assignedOfficer: 'Institution Legal Counsel / Registrar',
+        dueDateTime: app.sla_deadline,
         deadline: app.sla_deadline,
         deadlineType: 'STATUTORY_MANDATE',
         deadlineCalculationBasis: 'Statutory 15-day appellate limitation period (APH Clause 2.8)',
+        ruleReference: 'RULE-APH-SAC-APPEAL-04',
         ruleSource: 'RULE-APH-SAC-APPEAL-04 (APH Ch. II, Cl. 2.8)',
+        sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+        sectionClause: 'Chapter II, Clause 2.8',
         ruleVersion: app.rule_version,
+        ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+        prerequisites: basePrereqs,
         missingPrerequisites: ['Contested grounds of appeal with evidence required'],
+        blockingConditions: ['Statutory rejection order in force'],
+        evidenceRequired: ['Memorandum of Appeal to Standing Appellate Committee'],
+        evidenceSubmitted: baseEvidence,
         permittedNextStages: ['SAC_SHC_REVIEW'],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: 'Rejection speaking order issued. Statutory appeal window active.',
+        completionImpact: 'Triggers quasi-judicial Standing Appellate Committee (SAC) hearing.',
       };
 
     case 'SAC_SHC_REVIEW':
       return {
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Standing Appellate Committee (SAC) Quasi-Judicial Hearing',
         nextAction: 'Standing Appellate Committee Quasi-Judicial Hearing',
+        whyRequired: 'Appellate hearing conducted before retired High Court Judge / Senior Academician panel. Review of contested grounds.',
         why: 'Appellate hearing conducted before retired High Court Judge / Senior Academician panel. Review of contested grounds.',
+        category: 'APPELLATE_REVIEW',
+        status: 'ACTIONABLE',
         responsibleRole: 'CENTRAL_ADMIN',
         assignedOfficer: 'SAC Chairman & Member Secretary',
+        dueDateTime: app.sla_deadline,
         deadline: app.sla_deadline,
         deadlineType: 'STATUTORY_MANDATE',
         deadlineCalculationBasis: 'Statutory 15-day appellate disposal mandate',
+        ruleReference: 'RULE-APH-SAC-APPEAL-04',
         ruleSource: 'RULE-APH-SAC-APPEAL-04 (APH Ch. II, Cl. 2.8)',
+        sourceDocument: 'AICTE Approval Process Handbook (Published Baseline 2024–2027)',
+        sectionClause: 'Chapter II, Clause 2.8',
         ruleVersion: app.rule_version,
+        ruleVerificationStatus: 'VERIFIED_OFFICIAL_REGULATION',
+        prerequisites: basePrereqs,
         missingPrerequisites: [],
+        blockingConditions: [],
+        evidenceRequired: ['Appellate hearing minutes and judicial finding'],
+        evidenceSubmitted: baseEvidence,
         permittedNextStages: ['APPROVED', 'REJECTED_DEFICIENCY'],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: 'Contested appeal admitted by Standing Appellate Committee.',
+        completionImpact: 'Delivers final appellate determination.',
       };
 
     default:
       return {
-        nextAction: 'Administrative Review',
-        why: `Application is in stage ${app.current_stage}.`,
+        actionId,
+        applicationId: app.id,
+        docketNumber: app.docket_number,
+        actionTitle: 'Administrative Exception Queue Diagnostic Review',
+        nextAction: 'Administrative Diagnostic Review',
+        whyRequired: `Application is in unrecognized workflow stage '${app.current_stage}'. Requires manual diagnostic investigation by Central Admin.`,
+        why: `Application is in unrecognized stage ${app.current_stage}.`,
+        category: 'EXCEPTION_QUEUE',
+        status: 'DIAGNOSTIC_EXCEPTION',
         responsibleRole: 'CENTRAL_ADMIN',
-        assignedOfficer: 'Bureau Officer',
+        assignedOfficer: 'Bureau Exception Desk',
+        dueDateTime: app.sla_deadline,
         deadline: app.sla_deadline,
         deadlineType: 'INTERNAL_SERVICE_TARGET',
-        deadlineCalculationBasis: 'Standard queue processing',
-        ruleSource: 'RULE-APH-SCRUTINY-01',
+        deadlineCalculationBasis: 'Immediate exception queue escalation',
+        ruleReference: 'RULE-DEMO-ALERT-06',
+        ruleSource: 'RULE-DEMO-ALERT-06 (Operational Prototype Guideline)',
+        sourceDocument: 'SIH 2026 Demonstration Configuration Specifications',
+        sectionClause: 'Administrative Exception Procedure',
         ruleVersion: app.rule_version,
-        missingPrerequisites: [],
+        ruleVerificationStatus: 'CONFIGURED_DEMO_RULE',
+        prerequisites: basePrereqs,
+        missingPrerequisites: [`Unrecognized stage: ${app.current_stage}`],
+        blockingConditions: ['Invalid stage routing requires central administrative triage'],
+        evidenceRequired: ['Administrative diagnostic audit report'],
+        evidenceSubmitted: baseEvidence,
         permittedNextStages: [],
+        generatedBy: 'DETERMINISTIC_WORKFLOW_POLICY',
+        availabilityRationale: 'Diagnostic exception caught by authoritative state machine.',
+        completionImpact: 'Resolves corrupted or non-deterministic stage assignment.',
       };
   }
 }
@@ -426,8 +919,17 @@ applicationsRouter.post('/:id/transition', requireAuth, async (req: Authenticate
     }
 
     // Role-based permission checks for transitions
+    if (user.role === 'STATUTORY_AUDITOR') {
+      res.status(403).json({
+        error: 'Access Denied: Statutory Auditor has read-only oversight permissions and cannot alter workflow stages.',
+      });
+      return;
+    }
+
     if (user.role === 'INSTITUTION_REP') {
-      if (app.current_stage !== 'SCRUTINY_DEFICIENCY_RAISED' || targetStage !== 'UNDER_SCRUTINY') {
+      const allowedSource = ['SCRUTINY_DEFICIENCY_RAISED'];
+      const allowedTargets = ['UNDER_SCRUTINY', 'RE_SCRUTINY'];
+      if (!allowedSource.includes(app.current_stage) || !allowedTargets.includes(targetStage)) {
         res.status(403).json({
           error: 'Access Denied: Institutional Representative may only resubmit dockets when cures have been uploaded.',
         });
@@ -436,10 +938,25 @@ applicationsRouter.post('/:id/transition', requireAuth, async (req: Authenticate
     }
 
     if (user.role === 'SCRUTINY_OFFICER') {
-      const allowedTarget = ['UNDER_SCRUTINY', 'SCRUTINY_CLEARED', 'SCRUTINY_DEFICIENCY_RAISED'];
+      const allowedTarget = ['UNDER_SCRUTINY', 'SCRUTINY_CLEARED', 'SCRUTINY_DEFICIENCY_RAISED', 'RE_SCRUTINY'];
       if (!allowedTarget.includes(targetStage)) {
         res.status(403).json({
           error: `Access Denied: Scrutiny Officer cannot transition docket to '${targetStage}'. Permitted: ${allowedTarget.join(', ')}`,
+        });
+        return;
+      }
+    }
+
+    if (user.role === 'EVC_COORDINATOR') {
+      const allowedTargets: Record<string, string[]> = {
+        EVC_QUEUED: ['EVC_SCHEDULED'],
+        EVC_SCHEDULED: ['EVC_COMPLETED'],
+        SCRUTINY_CLEARED: ['EVC_QUEUED'],
+      };
+      const valid = allowedTargets[app.current_stage] || [];
+      if (!valid.includes(targetStage)) {
+        res.status(403).json({
+          error: `Access Denied: EVC Coordinator cannot transition docket from '${app.current_stage}' to '${targetStage}'.`,
         });
         return;
       }
@@ -470,7 +987,7 @@ applicationsRouter.post('/:id/transition', requireAuth, async (req: Authenticate
       if (app.trust_deed_valid === 0) {
         blockers.push('Trust/Society deed registration not marked valid.');
       }
-      if (app.fireNocValid === 0 || app.fire_noc_valid === 0) {
+      if (app.fire_noc_valid === 0) {
         blockers.push('Fire Safety NOC expired or unverified.');
       }
       if (app.building_plan_valid === 0) {
@@ -483,6 +1000,40 @@ applicationsRouter.post('/:id/transition', requireAuth, async (req: Authenticate
           targetStage,
           ruleSource: 'RULE-APH-SCRUTINY-01 (APH Ch. II, Cl. 2.3.1)',
           missingPrerequisites: blockers,
+        });
+        return;
+      }
+    }
+
+    // If sealing as APPROVED_UNCONDITIONAL, all undertakings must be VERIFIED_COMPLIANT
+    if (targetStage === 'APPROVED_UNCONDITIONAL') {
+      const pendingUndertakings = await query<any>(
+        "SELECT id, title FROM undertakings WHERE application_id = ? AND status != 'VERIFIED_COMPLIANT';",
+        [app.id]
+      );
+      if (pendingUndertakings.length > 0) {
+        res.status(400).json({
+          error: 'Statutory Transition Blocked: All time-bound conditional undertakings must be verified compliant before final unconditional sanction.',
+          targetStage,
+          ruleSource: 'RULE-APH-UNDERTAKINGS-05 (APH Ch. VII, Cl. 7.4)',
+          missingPrerequisites: pendingUndertakings.map((u) => `Undertaking '${u.title}' is not yet verified compliant.`),
+        });
+        return;
+      }
+    }
+
+    // If moving to EVC_SCHEDULED, ensure panel does not have critical conflicts
+    if (targetStage === 'EVC_SCHEDULED') {
+      const evc = await queryOne<any>(
+        'SELECT conflict_check_status, conflict_check_notes FROM evc_records WHERE application_id = ?;',
+        [app.id]
+      );
+      if (evc && evc.conflict_check_status === 'CONFLICT_CONFIRMED') {
+        res.status(400).json({
+          error: 'Statutory Transition Blocked: Empanelled EVC committee has confirmed conflict of interest.',
+          targetStage,
+          ruleSource: 'RULE-APH-EVC-03 (APH Ch. II, Cl. 2.5)',
+          missingPrerequisites: [evc.conflict_check_notes || 'Confirmed conflict of interest detected in expert panel.'],
         });
         return;
       }
