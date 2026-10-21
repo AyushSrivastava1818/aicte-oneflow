@@ -72,40 +72,44 @@ notificationsRouter.post('/reconcile', requireAuth, async (_req: AuthenticatedRe
 
       for (const u of overdueUndertakings) {
         const idempKey = `IDEMP-ESC-L2-${u.id}-${u.due_date}`;
+        const notifId = `notif-esc-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const nowIso = new Date().toISOString();
+
+        // 1. Atomic idempotent insert
+        await execute(
+          `INSERT OR IGNORE INTO notifications (
+            id, docket_number, recipient_role, recipient_email, subject, body_preview,
+            channel, timestamp, status, escalation_level, idempotency_key, attempt_count,
+            last_attempt_at, obligation_still_open
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 1);`,
+          [
+            notifId,
+            u.docket_number,
+            'REGIONAL_OFFICER',
+            'ro.western@aicte.gov.in',
+            `[SIMULATED] ESCALATION LEVEL 2: Breach of Statutory Deadline for ${u.title}`,
+            `Statutory undertaking '${u.title}' for docket ${u.docket_number} is overdue past ${u.due_date}. Auto-escalated to Regional Director.`,
+            'SIMULATED_NIC_EMAIL',
+            nowIso,
+            'SENT_SIMULATED',
+            'LEVEL_2_RO',
+            idempKey,
+            nowIso,
+          ]
+        );
+
+        // 2. Determine if newly created or heartbeat update
         const existing = await queryOne<any>(
           'SELECT id, attempt_count FROM notifications WHERE idempotency_key = ?;',
           [idempKey]
         );
 
-        if (!existing) {
-          const notifId = `notif-esc-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-          await execute(
-            `INSERT INTO notifications (
-              id, docket_number, recipient_role, recipient_email, subject, body_preview,
-              channel, timestamp, status, escalation_level, idempotency_key, attempt_count,
-              last_attempt_at, obligation_still_open
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 1);`,
-            [
-              notifId,
-              u.docket_number,
-              'REGIONAL_OFFICER',
-              'ro.western@aicte.gov.in',
-              `[SIMULATED] ESCALATION LEVEL 2: Breach of Statutory Deadline for ${u.title}`,
-              `Statutory undertaking '${u.title}' for docket ${u.docket_number} is overdue past ${u.due_date}. Auto-escalated to Regional Director.`,
-              'SIMULATED_NIC_EMAIL',
-              new Date().toISOString(),
-              'SENT_SIMULATED',
-              'LEVEL_2_RO',
-              idempKey,
-              new Date().toISOString(),
-            ]
-          );
+        if (existing && existing.id === notifId) {
           createdCount++;
-        } else {
-          // Idempotent retry / heartbeat update on existing open alert
+        } else if (existing) {
           await execute(
             'UPDATE notifications SET attempt_count = attempt_count + 1, last_attempt_at = ? WHERE id = ?;',
-            [new Date().toISOString(), existing.id]
+            [nowIso, existing.id]
           );
         }
       }

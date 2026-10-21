@@ -245,23 +245,46 @@ describe('AICTE OneFlow Relational Backend & Security Hardening Suite', () => {
       expect(res.body.error).toContain('time-bound conditional undertakings must be verified compliant');
     });
 
-    it('POST /api/applications/:id/transition should execute valid transition and commit SHA-256 block', async () => {
-      // app-102 is in SCRUTINY_CLEARED, transitioning to EVC_QUEUED by Admin
+    it('POST /api/applications/:id/transition should return HTTP 409 CONCURRENT_CONFLICT upon stale concurrent transition attempts', async () => {
+      // 1. Advance app-103 to EVC_SCHEDULED
       const res = await request(app)
-        .post('/api/applications/app-102/transition')
+        .post('/api/applications/app-103/transition')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
-          targetStage: 'EVC_QUEUED',
-          observations: 'Regional Committee dispatched EVC panel.',
+          targetStage: 'EVC_SCHEDULED',
+          observations: 'Initial state transition',
         });
       expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.transition.auditBlockHeight).toBeDefined();
-      expect(res.body.transition.auditCurrentHash).toMatch(/^[a-f0-9]{64}$/);
+
+      // 2. Client sending stale expectedStage should receive HTTP 409 CONCURRENT_CONFLICT
+      const staleRes = await request(app)
+        .post('/api/applications/app-103/transition')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          expectedStage: 'EVC_QUEUED', // Stale cached client state
+          targetStage: 'EVC_COMPLETED',
+          observations: 'Stale client attempting transition',
+        });
+      expect(staleRes.status).toBe(409);
+      expect(staleRes.body.error).toContain('CONCURRENT_CONFLICT');
     });
   });
 
   describe('5. Database Concurrency, ACID Rollback, and Single-Writer Safety', () => {
+    it('Should persist records across normal application restart and file reloading', async () => {
+      const testEmail = `persisted-${Date.now()}@test.aicte.gov.in`;
+      await execute(
+        `INSERT INTO users (id, email, password_hash, name, role, created_at)
+         VALUES (?, ?, 'hash', 'Test Persist User', 'CENTRAL_ADMIN', ?);`,
+        [`usr-test-${Date.now()}`, testEmail, new Date().toISOString()]
+      );
+
+      // Read from disk database file directly to prove on-disk durability
+      const diskRows = await query<any>('SELECT email FROM users WHERE email = ?;', [testEmail]);
+      expect(diskRows.length).toBe(1);
+      expect(diskRows[0].email).toBe(testEmail);
+    });
+
     it('Should execute 10 concurrent database operations without corruption or interleaving errors', async () => {
       const promises: Promise<any>[] = [];
       for (let i = 0; i < 10; i++) {
@@ -329,6 +352,39 @@ describe('AICTE OneFlow Relational Backend & Security Hardening Suite', () => {
         .set('Authorization', `Bearer ${adminToken}`);
       expect(restoreRes.status).toBe(200);
       expect(restoreRes.body.isValid).toBe(true);
+    });
+
+    it('GET /api/audit/verify should detect broken predecessor hash pointer', async () => {
+      const originalBlock = (await query<any>('SELECT * FROM audit_events WHERE block_height = 3;'))[0];
+      await execute(
+        "UPDATE audit_events SET previous_hash = 'CORRUPTED_PREV_HASH_000000000000000000000000000000000000000000000000' WHERE block_height = 3;"
+      );
+
+      const res = await request(app)
+        .get('/api/audit/verify')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(400);
+      expect(res.body.isValid).toBe(false);
+      expect(res.body.failureAtBlock).toBe(3);
+      expect(res.body.reason.toLowerCase()).toContain('previous hash pointer mismatch');
+
+      // Restore original
+      await execute('UPDATE audit_events SET previous_hash = ? WHERE block_height = 3;', [originalBlock.previous_hash]);
+    });
+
+    it('GET /api/audit/verify should detect block height sequence discontinuity', async () => {
+      // Temporarily change block height of block 4 to 999
+      await execute('UPDATE audit_events SET block_height = 999 WHERE block_height = 4;');
+
+      const res = await request(app)
+        .get('/api/audit/verify')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(400);
+      expect(res.body.isValid).toBe(false);
+      expect(res.body.reason.toLowerCase()).toContain('block height sequence violation');
+
+      // Restore block height
+      await execute('UPDATE audit_events SET block_height = 4 WHERE block_height = 999;');
     });
   });
 

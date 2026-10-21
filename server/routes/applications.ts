@@ -918,10 +918,25 @@ applicationsRouter.post('/:id/transition', requireAuth, async (req: Authenticate
       return;
     }
 
-    // Role-based permission checks for transitions
+    // Role-based permission checks for transitions (Authorization must precede payload validation)
     if (user.role === 'STATUTORY_AUDITOR') {
       res.status(403).json({
         error: 'Access Denied: Statutory Auditor has read-only oversight permissions and cannot alter workflow stages.',
+      });
+      return;
+    }
+
+    if (app.current_stage === targetStage) {
+      res.status(400).json({
+        error: `Invalid State Transition: Application docket is already in stage '${targetStage}'.`,
+      });
+      return;
+    }
+
+    const expectedStage = req.body.expectedStage;
+    if (expectedStage && expectedStage !== app.current_stage) {
+      res.status(409).json({
+        error: `CONCURRENT_CONFLICT: Expected stage '${expectedStage}' diverges from authoritative database stage '${app.current_stage}'. Stale update rejected.`,
       });
       return;
     }

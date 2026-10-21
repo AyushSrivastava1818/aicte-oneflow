@@ -2,7 +2,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 
-interface BenchmarkResult {
+interface BenchmarkMetrics {
   totalRequests: number;
   concurrency: number;
   durationMs: number;
@@ -11,24 +11,36 @@ interface BenchmarkResult {
   p50: number;
   p95: number;
   p99: number;
-  errorCount: number;
-  errorRate: number;
+  min: number;
+  max: number;
+  status2xx: number;
+  status409Conflicts: number;
+  status4xxClientErrors: number;
+  status5xxServerErrors: number;
+  networkErrors: number;
   dbSizeBytes: number;
 }
 
-function makeRequest(options: http.RequestOptions, postData?: string): Promise<{ statusCode: number; latencyMs: number }> {
-  return new Promise((resolve, reject) => {
+function makeRequest(
+  options: http.RequestOptions,
+  postData?: string
+): Promise<{ statusCode: number; latencyMs: number; body: string }> {
+  return new Promise((resolve) => {
     const start = performance.now();
     const req = http.request(options, (res) => {
-      res.on('data', () => {});
+      let body = '';
+      res.on('data', (chunk) => {
+        body += chunk;
+      });
       res.on('end', () => {
         const latencyMs = performance.now() - start;
-        resolve({ statusCode: res.statusCode || 500, latencyMs });
+        resolve({ statusCode: res.statusCode || 500, latencyMs, body });
       });
     });
 
     req.on('error', (err) => {
-      reject(err);
+      const latencyMs = performance.now() - start;
+      resolve({ statusCode: 0, latencyMs, body: err.message });
     });
 
     if (postData) {
@@ -78,7 +90,11 @@ async function runBenchmark(): Promise<void> {
   // Benchmark phase
   console.log(`\n2. Executing benchmark (${totalRequests} requests, Concurrency: ${concurrency})...`);
   const latencies: number[] = [];
-  let errorCount = 0;
+  let status2xx = 0;
+  let status409Conflicts = 0;
+  let status4xxClientErrors = 0;
+  let status5xxServerErrors = 0;
+  let networkErrors = 0;
   let completed = 0;
 
   const startTime = performance.now();
@@ -100,24 +116,29 @@ async function runBenchmark(): Promise<void> {
         }
       }
 
-      try {
-        const res = await makeRequest({
-          hostname: 'localhost',
-          port,
-          path: selected.path,
-          method: selected.method,
-          headers: {
-            'x-simulated-role': 'CENTRAL_ADMIN',
-            'Content-Type': 'application/json',
-          },
-        });
+      const res = await makeRequest({
+        hostname: 'localhost',
+        port,
+        path: selected.path,
+        method: selected.method,
+        headers: {
+          'x-simulated-role': 'CENTRAL_ADMIN',
+          'Content-Type': 'application/json',
+        },
+      });
 
-        latencies.push(res.latencyMs);
-        if (res.statusCode >= 400 && res.statusCode !== 409) {
-          errorCount++;
-        }
-      } catch {
-        errorCount++;
+      latencies.push(res.latencyMs);
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        status2xx++;
+      } else if (res.statusCode === 409) {
+        status409Conflicts++;
+      } else if (res.statusCode >= 400 && res.statusCode < 500) {
+        status4xxClientErrors++;
+      } else if (res.statusCode >= 500) {
+        status5xxServerErrors++;
+      } else {
+        networkErrors++;
       }
     }
   }
@@ -131,6 +152,8 @@ async function runBenchmark(): Promise<void> {
   const p50 = latencies[Math.floor(latencies.length * 0.5)] || 0;
   const p95 = latencies[Math.floor(latencies.length * 0.95)] || 0;
   const p99 = latencies[Math.floor(latencies.length * 0.99)] || 0;
+  const min = latencies[0] || 0;
+  const max = latencies[latencies.length - 1] || 0;
   const throughputReqSec = (latencies.length / durationMs) * 1000;
 
   const dbPath = path.resolve(process.cwd(), 'data', 'aicte_oneflow.sqlite');
@@ -141,7 +164,7 @@ async function runBenchmark(): Promise<void> {
     }
   } catch {}
 
-  const result: BenchmarkResult = {
+  const metrics: BenchmarkMetrics = {
     totalRequests: latencies.length,
     concurrency,
     durationMs,
@@ -150,23 +173,41 @@ async function runBenchmark(): Promise<void> {
     p50,
     p95,
     p99,
-    errorCount,
-    errorRate: (errorCount / latencies.length) * 100,
+    min,
+    max,
+    status2xx,
+    status409Conflicts,
+    status4xxClientErrors,
+    status5xxServerErrors,
+    networkErrors,
     dbSizeBytes,
   };
 
+  const successRate = ((metrics.status2xx / metrics.totalRequests) * 100).toFixed(2);
+  const conflictRate = ((metrics.status409Conflicts / metrics.totalRequests) * 100).toFixed(2);
+  const clientErrRate = ((metrics.status4xxClientErrors / metrics.totalRequests) * 100).toFixed(2);
+  const serverErrRate = ((metrics.status5xxServerErrors / metrics.totalRequests) * 100).toFixed(2);
+
   console.log('\n================================================================');
-  console.log('📊 MEASURED BENCHMARK RESULTS');
+  console.log('📊 MEASURED BENCHMARK BREAKDOWN & RELIABILITY REPORT');
   console.log('================================================================');
-  console.log(`Total Requests Tested : ${result.totalRequests}`);
-  console.log(`Concurrency Level     : ${result.concurrency}`);
-  console.log(`Total Duration        : ${(result.durationMs / 1000).toFixed(2)} seconds`);
-  console.log(`Throughput            : ${result.throughputReqSec.toFixed(1)} req/sec`);
-  console.log(`p50 Latency (Median)  : ${result.p50.toFixed(2)} ms`);
-  console.log(`p95 Latency           : ${result.p95.toFixed(2)} ms`);
-  console.log(`p99 Latency           : ${result.p99.toFixed(2)} ms`);
-  console.log(`Error Count / Rate    : ${result.errorCount} (${result.errorRate.toFixed(2)}%)`);
-  console.log(`SQLite Database Size  : ${(result.dbSizeBytes / 1024).toFixed(1)} KB`);
+  console.log(`Total Requests Executed      : ${metrics.totalRequests}`);
+  console.log(`Concurrency Level            : ${metrics.concurrency} parallel workers`);
+  console.log(`Total Wall-Clock Duration    : ${(metrics.durationMs / 1000).toFixed(2)} seconds`);
+  console.log(`Throughput                   : ${metrics.throughputReqSec.toFixed(1)} req/sec`);
+  console.log('----------------------------------------------------------------');
+  console.log(`Latency min                  : ${metrics.min.toFixed(2)} ms`);
+  console.log(`Latency p50 (Median)         : ${metrics.p50.toFixed(2)} ms`);
+  console.log(`Latency p95                  : ${metrics.p95.toFixed(2)} ms`);
+  console.log(`Latency p99                  : ${metrics.p99.toFixed(2)} ms`);
+  console.log(`Latency max                  : ${metrics.max.toFixed(2)} ms`);
+  console.log('----------------------------------------------------------------');
+  console.log(`Successful Responses (2xx)   : ${metrics.status2xx} (${successRate}%)`);
+  console.log(`Expected Optimistic Conflicts: ${metrics.status409Conflicts} (${conflictRate}%) [HTTP 409]`);
+  console.log(`Unexpected Client Errors     : ${metrics.status4xxClientErrors} (${clientErrRate}%) [HTTP 4xx]`);
+  console.log(`Server Errors                : ${metrics.status5xxServerErrors} (${serverErrRate}%) [HTTP 5xx]`);
+  console.log(`Network / Timeout Failures   : ${metrics.networkErrors}`);
+  console.log(`Authoritative Database Size  : ${(metrics.dbSizeBytes / 1024).toFixed(1)} KB`);
   console.log('================================================================\n');
 }
 
