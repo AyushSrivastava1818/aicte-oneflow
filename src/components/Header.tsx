@@ -8,6 +8,7 @@ interface HeaderProps {
   onOpenWalkthrough: () => void;
   unreadAlertCount: number;
   onResetSeedData: () => void;
+  backendConnected?: boolean;
 }
 
 const ROLE_METADATA: Record<Role, { label: string; department: string; clearance: string }> = {
@@ -49,6 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenWalkthrough,
   unreadAlertCount,
   onResetSeedData,
+  backendConnected,
 }) => {
   const roleInfo = ROLE_METADATA[currentRole];
 
@@ -75,6 +77,11 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
           <span className="hidden lg:inline text-slate-500" aria-hidden="true">|</span>
           <span className="text-emerald-400 font-mono hidden sm:inline">IST (UTC+05:30)</span>
+          <span className="hidden lg:inline text-slate-500" aria-hidden="true">|</span>
+          <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-950 text-emerald-300 border border-emerald-700/50">
+            <span className={`w-1.5 h-1.5 rounded-full ${backendConnected !== false ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+            {backendConnected !== false ? 'SQLite Relational: Active' : 'Offline Cache Mode'}
+          </span>
           <span className="hidden lg:inline text-slate-500" aria-hidden="true">|</span>
           <button 
             onClick={onResetSeedData}

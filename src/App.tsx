@@ -27,10 +27,10 @@ import { DocumentRadar } from './components/DocumentRadar';
 import { NotificationEngine } from './components/NotificationEngine';
 import { AuditLedger } from './components/AuditLedger';
 import { WalkthroughModal } from './components/WalkthroughModal';
-import { computeSha256, createCanonicalPayload } from './services/workflowEngine';
+import { apiClient } from './services/apiClient';
 
 export function App() {
-  // Persistent LocalStorage State
+  // Persistent LocalStorage / Fallback State
   const [applications, setApplications] = useState<Application[]>(() => {
     const saved = localStorage.getItem('aicte_oneflow_apps_v3');
     return saved ? JSON.parse(saved) : INITIAL_APPLICATIONS;
@@ -61,13 +61,43 @@ export function App() {
     return saved ? JSON.parse(saved) : INITIAL_AUDIT_LOGS;
   });
 
-  // UI Navigation State
+  // UI Navigation & Backend Connectivity State
   const [currentRole, setCurrentRole] = useState<Role>('REGIONAL_OFFICER');
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [selectedDocket, setSelectedDocket] = useState<string | null>('AICTE/2026-27/RO-N/10942');
   const [isWalkthroughOpen, setIsWalkthroughOpen] = useState(false);
+  const [backendConnected, setBackendConnected] = useState<boolean>(true);
+  const [backendNotice, setBackendNotice] = useState<string | null>(null);
 
-  // Sync to localStorage
+  // Load Authoritative State from Relational Backend
+  const refreshAllFromBackend = async (role = currentRole) => {
+    try {
+      const [apps, evc, und, docs, notifs, audit] = await Promise.all([
+        apiClient.getApplications(role),
+        apiClient.getEVCRecords(role),
+        apiClient.getUndertakings(role),
+        apiClient.getDocuments(role),
+        apiClient.getNotifications(role),
+        apiClient.getAuditLogs(role),
+      ]);
+      setApplications(apps);
+      setEvcRecords(evc);
+      setUndertakings(und);
+      setDocuments(docs);
+      setNotifications(notifs);
+      setAuditLogs(audit);
+      setBackendConnected(true);
+    } catch (err: any) {
+      console.warn('Backend fetch failed or offline, using cached state:', err);
+      setBackendConnected(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshAllFromBackend(currentRole);
+  }, [currentRole]);
+
+  // Sync to localStorage as client cache
   useEffect(() => {
     localStorage.setItem('aicte_oneflow_apps_v3', JSON.stringify(applications));
   }, [applications]);
@@ -92,181 +122,55 @@ export function App() {
     localStorage.setItem('aicte_oneflow_audit_v3', JSON.stringify(auditLogs));
   }, [auditLogs]);
 
-  // Helper to append an immutable cryptographic audit record with canonical JSON serialization
-  const appendAuditRecord = async (
-    actorRole: Role,
-    actorName: string,
-    actionType: string,
-    docketNumber: string,
-    prevStage: string,
-    newStage: string,
-    reason: string
-  ) => {
-    const lastBlock = auditLogs[auditLogs.length - 1];
-    const prevHash = lastBlock ? lastBlock.currentHash : 'GENESIS_BLOCK_AICTE_ONEFLOW_00000000000000000000000000000000';
-    const blockHeight = auditLogs.length + 1;
-    const timestamp = new Date().toISOString();
-    const actorId = `usr-${actorRole.toLowerCase()}-${Date.now().toString().slice(-4)}`;
-
-    const canonicalPayload = createCanonicalPayload({
-      actionType,
-      actorId,
-      blockHeight,
-      docketNumber,
-      newStage,
-      previousHash: prevHash,
-      previousStage: prevStage,
-      reasonOrObservations: reason,
-      ruleVersion: 'APH-2024-27-v1.4',
-      timestamp,
-    });
-
-    const currentHash = await computeSha256(canonicalPayload);
-
-    const newBlock: CryptographicAuditRecord = {
-      id: `audit-block-${blockHeight}`,
-      blockHeight,
-      timestamp,
-      actorId,
-      actorName,
-      actorRole,
-      actionType,
-      docketNumber,
-      previousStage: prevStage,
-      newStage,
-      ruleVersion: 'APH-2024-27-v1.4',
-      reasonOrObservations: reason,
-      ipAddress: '10.14.88.24 (AICTE Regulated Bureau Node)',
-      canonicalPayload,
-      algorithm: 'SHA-256',
-      schemaVersion: '1.2',
-      previousHash: prevHash,
-      currentHash,
-    };
-
-    setAuditLogs(prev => [...prev, newBlock]);
-  };
-
   // Workflow Handlers
   const handleAdvanceStage = async (appId: string, targetStage: WorkflowStage, reason: string) => {
     const app = applications.find(a => a.id === appId);
     if (!app) return { success: false, message: 'Application not found.' };
 
-    const oldStage = app.currentStage;
-
-    setApplications(prev => prev.map(a => {
-      if (a.id === appId) {
-        return {
-          ...a,
-          currentStage: targetStage,
-          lastAction: reason,
-          lastActionTimestamp: new Date().toISOString(),
-        };
-      }
-      return a;
-    }));
-
-    await appendAuditRecord(
-      currentRole,
-      currentRole === 'CENTRAL_ADMIN' ? 'Member Secretary AICTE' :
-      currentRole === 'REGIONAL_OFFICER' ? 'Regional Director RO' :
-      currentRole === 'SCRUTINY_OFFICER' ? 'Bureau Scrutiny Desk 3' : 'Authorized Signatory',
-      `STAGE_TRANSITION_TO_${targetStage}`,
-      app.docketNumber,
-      oldStage,
-      targetStage,
-      reason
-    );
-
-    return {
-      success: true,
-      message: `Docket ${app.docketNumber} successfully transitioned from ${oldStage} to ${targetStage}. Cryptographic block committed.`,
-    };
+    try {
+      const result = await apiClient.transitionApplication(
+        appId,
+        targetStage,
+        reason,
+        'APH-2024-27-REV-02',
+        currentRole
+      );
+      await refreshAllFromBackend(currentRole);
+      setBackendNotice(`Docket transition committed to SQLite & SHA-256 block #${result.transition.auditBlockHeight} generated.`);
+      setTimeout(() => setBackendNotice(null), 5000);
+      return { success: true, message: result.message };
+    } catch (err: any) {
+      // Return authoritative backend validation error
+      return { success: false, message: err.message };
+    }
   };
 
   const handleResolveDeficiency = async (appId: string, defId: string) => {
-    const app = applications.find(a => a.id === appId);
-    if (!app) return;
-
-    setApplications(prev => prev.map(a => {
-      if (a.id === appId) {
-        const updatedDefs = a.deficiencies.map(d => d.id === defId ? { ...d, resolved: true } : d);
-        return {
-          ...a,
-          deficiencies: updatedDefs,
-          lastAction: 'Deficiency resolved following verification',
-          lastActionTimestamp: new Date().toISOString(),
-        };
-      }
-      return a;
-    }));
-
-    await appendAuditRecord(
-      currentRole,
-      'Bureau Scrutiny Desk',
-      'DEFICIENCY_MARKED_RESOLVED',
-      app.docketNumber,
-      app.currentStage,
-      app.currentStage,
-      `Deficiency ID ${defId} certified rectified after re-scrutiny verification.`
-    );
+    try {
+      await apiClient.resolveDeficiency(appId, defId, 'Rectified by applicant with documentation', currentRole);
+      await refreshAllFromBackend(currentRole);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleAddDeficiency = async (appId: string, clause: string, description: string) => {
-    const app = applications.find(a => a.id === appId);
-    if (!app) return;
-
-    const newDef = {
-      id: `def-${Date.now().toString().slice(-4)}`,
-      clause,
-      description,
-      severity: 'CRITICAL' as const,
-      raisedBy: 'Bureau Scrutiny Officer',
-      raisedAt: new Date().toISOString(),
-      resolved: false,
-    };
-
-    setApplications(prev => prev.map(a => {
-      if (a.id === appId) {
-        return {
-          ...a,
-          currentStage: 'SCRUTINY_DEFICIENCY_RAISED',
-          deficiencies: [...a.deficiencies, newDef],
-          lastAction: `Deficiency raised: ${clause}`,
-          lastActionTimestamp: new Date().toISOString(),
-        };
-      }
-      return a;
-    }));
-
-    await appendAuditRecord(
-      currentRole,
-      'Bureau Scrutiny Officer',
-      'DEFICIENCY_RECORDED',
-      app.docketNumber,
-      app.currentStage,
-      'SCRUTINY_DEFICIENCY_RAISED',
-      `Form 17 Deficiency recorded under ${clause}: ${description}`
-    );
+    try {
+      await apiClient.addDeficiency(appId, clause, description, 'CRITICAL', currentRole);
+      await refreshAllFromBackend(currentRole);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   // EVC Handlers
   const handleScheduleVisit = async (evcId: string, visitDate: string) => {
-    const evc = evcRecords.find(e => e.id === evcId);
-    if (!evc) return;
-
-    setEvcRecords(prev => prev.map(e => e.id === evcId ? { ...e, scheduledDate: visitDate, status: 'SCHEDULED' } : e));
-    setApplications(prev => prev.map(a => a.id === evc.applicationId ? { ...a, currentStage: 'EVC_SCHEDULED' } : a));
-
-    await appendAuditRecord(
-      currentRole,
-      'EVC Coordinator',
-      'EVC_VISIT_SCHEDULED',
-      evc.docketNumber,
-      'EVC_QUEUED',
-      'EVC_SCHEDULED',
-      `EVC visit scheduled for ${new Date(visitDate).toLocaleString()}. Conflict-of-interest check confirmed.`
-    );
+    try {
+      await apiClient.scheduleEVC(evcId, visitDate, 'EVC Desk Coordinator', currentRole);
+      await refreshAllFromBackend(currentRole);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleSubmitEVCOutcome = async (
@@ -274,157 +178,94 @@ export function App() {
     recommendation: 'RECOMMENDED_FULL' | 'RECOMMENDED_WITH_CONDITIONS' | 'REJECTED_DEFICIENT',
     remarks: string
   ) => {
-    const evc = evcRecords.find(e => e.id === evcId);
-    if (!evc) return;
-
-    setEvcRecords(prev => prev.map(e => e.id === evcId ? { ...e, status: 'REPORT_SUBMITTED', recommendation, remarks } : e));
-    setApplications(prev => prev.map(a => a.id === evc.applicationId ? { ...a, currentStage: 'EVC_COMPLETED' } : a));
-
-    await appendAuditRecord(
-      currentRole,
-      'EVC Panel Committee',
-      'EVC_REPORT_SUBMITTED',
-      evc.docketNumber,
-      'EVC_SCHEDULED',
-      'EVC_COMPLETED',
-      `EVC Inspection completed. Recommendation: ${recommendation}. Observations: ${remarks}`
-    );
+    try {
+      const rec = recommendation === 'RECOMMENDED_FULL' ? 'RECOMMEND_APPROVAL' : 'DEFICIENCY_POINTED';
+      await apiClient.submitEVCOutcome(evcId, rec, remarks, undefined, currentRole);
+      await refreshAllFromBackend(currentRole);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   // Undertakings Handlers
   const handleUploadEvidence = async (undId: string, fileName: string) => {
-    const und = undertakings.find(u => u.id === undId);
-    if (!und) return;
-
-    setUndertakings(prev => prev.map(u => u.id === undId ? {
-      ...u,
-      status: 'SUBMITTED_UNDER_REVIEW',
-      evidenceDocName: fileName,
-      evidenceDocSize: '3.9 MB',
-      submittedAt: new Date().toISOString(),
-    } : u));
-
-    await appendAuditRecord(
-      currentRole,
-      'Institutional Registrar',
-      'UNDERTAKING_EVIDENCE_SUBMITTED',
-      und.docketNumber,
-      'PENDING_SUBMISSION',
-      'SUBMITTED_UNDER_REVIEW',
-      `Evidence uploaded for undertaking ${und.title} (File: ${fileName}). Submission queued for Bureau verification.`
-    );
+    try {
+      await apiClient.uploadUndertakingEvidence(undId, fileName, '3.9 MB', currentRole);
+      await refreshAllFromBackend(currentRole);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleVerifyUndertaking = async (undId: string, verified: boolean, notes: string) => {
-    const und = undertakings.find(u => u.id === undId);
-    if (!und) return;
-
-    const newStatus = verified ? 'VERIFIED_COMPLIANT' : 'RETURNED_FOR_CORRECTION';
-
-    setUndertakings(prev => prev.map(u => u.id === undId ? {
-      ...u,
-      status: newStatus,
-      verificationNotes: notes,
-      verifiedBy: 'Regional Officer',
-      verifiedAt: new Date().toISOString(),
-    } : u));
-
-    await appendAuditRecord(
-      currentRole,
-      'Regional Officer',
-      verified ? 'UNDERTAKING_VERIFIED_COMPLIANT' : 'UNDERTAKING_RETURNED_FOR_CORRECTION',
-      und.docketNumber,
-      und.status,
-      newStatus,
-      `Undertaking ${und.title} verification outcome: ${verified ? 'ACCEPTED COMPLIANT' : 'RETURNED'}. Notes: ${notes}`
-    );
+    try {
+      await apiClient.verifyUndertaking(undId, verified ? 'APPROVE' : 'RETURN', notes, currentRole);
+      await refreshAllFromBackend(currentRole);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   // Document Radar Handlers
   const handleConfirmOCR = async (docId: string) => {
-    setDocuments(prev => prev.map(d => d.id === docId ? {
-      ...d,
-      ocrExtraction: { 
-        ...d.ocrExtraction, 
-        humanConfirmed: true,
-        confirmedBy: currentRole,
-        confirmedAt: new Date().toISOString(),
-      }
-    } : d));
+    const doc = documents.find(d => d.id === docId);
+    if (!doc) return;
+    try {
+      await apiClient.confirmDocumentOCR(docId, doc.issueDate, doc.expiryDate, 'Human verified', currentRole);
+      await refreshAllFromBackend(currentRole);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleSubmitRenewal = async (docId: string, newExpiry: string, newNumber: string) => {
     const doc = documents.find(d => d.id === docId);
     if (!doc) return;
-
-    setDocuments(prev => prev.map(d => d.id === docId ? {
-      ...d,
-      documentNumber: newNumber,
-      expiryDate: newExpiry,
-      daysRemaining: 3650,
-      status: 'RENEWAL_VERIFIED',
-      lastRenewedDate: new Date().toISOString(),
-    } : d));
-
-    await appendAuditRecord(
-      currentRole,
-      'Registrar & Regional Desk',
-      'PRESCRIBED_DOCUMENT_RENEWAL_VERIFIED',
-      doc.institutionCode,
-      doc.status,
-      'RENEWAL_VERIFIED',
-      `Registered 30-Year Lease / Document renewal verified. New Expiry: ${newExpiry}, Reg No: ${newNumber}.`
-    );
+    try {
+      await apiClient.renewDocument(docId, newExpiry, newNumber, doc.issuedByAuthority, currentRole);
+      await refreshAllFromBackend(currentRole);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  // Cron Simulator: Rechecks open obligations before dispatching notifications
-  const handleTriggerCronCheck = () => {
-    // Check if app-101 has open obligations
-    const app101 = applications.find(a => a.id === 'app-101');
-    const hasOpenObligations = app101 ? app101.deficiencies.some(d => !d.resolved) : true;
-
-    const newNotif: NotificationLog = {
-      id: `notif-${Date.now().toString().slice(-4)}`,
-      docketNumber: 'AICTE/2026-27/RO-N/10942',
-      recipientRole: 'SCRUTINY_OFFICER',
-      recipientEmail: 'rameshwar.nath@aicte-india.org',
-      subject: hasOpenObligations 
-        ? 'Background Worker Heartbeat: SLA Reconciliation Complete'
-        : 'Alert Suppressed: All obligations for docket are already verified resolved.',
-      bodyPreview: hasOpenObligations
-        ? 'Durable reconciler verified active dockets. Docket 10942 has 2 active deficiencies requiring resolution.'
-        : 'Pre-dispatch check confirmed all deficiencies resolved. Duplicate alert suppressed.',
-      channel: 'OFFICIAL_PORTAL_ALERT',
-      timestamp: new Date().toISOString(),
-      status: hasOpenObligations ? 'DELIVERED_SIMULATED' : 'SUPPRESSED_RESOLVED',
-      escalationLevel: 'DESK_OFFICER',
-      idempotencyKey: `idemp_cron_reconcile_${Date.now()}`,
-      attemptCount: 1,
-      lastAttemptAt: new Date().toISOString(),
-      obligationStillOpen: hasOpenObligations,
-    };
-
-    setNotifications(prev => [newNotif, ...prev]);
+  // Cron Reconciler: Rechecks open obligations with backend reconciliation
+  const handleTriggerCronCheck = async () => {
+    try {
+      const res = await apiClient.reconcileNotifications(currentRole);
+      await refreshAllFromBackend(currentRole);
+      setBackendNotice(`Durable background worker reconciled obligations: ${res.newAlertsCreated} alerts escalated, ${res.alertsSuppressed} resolved alerts suppressed.`);
+      setTimeout(() => setBackendNotice(null), 5000);
+    } catch (err: any) {
+      console.error(err);
+    }
   };
 
-  const handleAcknowledgeAlert = (notifId: string) => {
-    setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, status: 'ACKNOWLEDGED' } : n));
+  const handleAcknowledgeAlert = async (notifId: string) => {
+    try {
+      await apiClient.acknowledgeNotification(notifId, currentRole);
+      setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, status: 'ACKNOWLEDGED' } : n));
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const handleResetSeedData = () => {
-    localStorage.removeItem('aicte_oneflow_apps_v3');
-    localStorage.removeItem('aicte_oneflow_evc_v3');
-    localStorage.removeItem('aicte_oneflow_und_v3');
-    localStorage.removeItem('aicte_oneflow_docs_v3');
-    localStorage.removeItem('aicte_oneflow_notifs_v3');
-    localStorage.removeItem('aicte_oneflow_audit_v3');
-    setApplications(INITIAL_APPLICATIONS);
-    setEvcRecords(INITIAL_EVC_RECORDS);
-    setUndertakings(INITIAL_UNDERTAKINGS);
-    setDocuments(INITIAL_DOCUMENTS);
-    setNotifications(INITIAL_NOTIFICATIONS);
-    setAuditLogs(INITIAL_AUDIT_LOGS);
-    setSelectedDocket('AICTE/2026-27/RO-N/10942');
+  const handleResetSeedData = async () => {
+    try {
+      await apiClient.resetDemo();
+      localStorage.removeItem('aicte_oneflow_apps_v3');
+      localStorage.removeItem('aicte_oneflow_evc_v3');
+      localStorage.removeItem('aicte_oneflow_und_v3');
+      localStorage.removeItem('aicte_oneflow_docs_v3');
+      localStorage.removeItem('aicte_oneflow_notifs_v3');
+      localStorage.removeItem('aicte_oneflow_audit_v3');
+      await refreshAllFromBackend(currentRole);
+      setSelectedDocket('AICTE/2026-27/RO-N/10942');
+      setBackendNotice('Demonstration dataset safely reset to pristine baseline in SQLite database.');
+      setTimeout(() => setBackendNotice(null), 5000);
+    } catch (err: any) {
+      console.error('Demo reset failed:', err);
+    }
   };
 
   return (
@@ -436,7 +277,26 @@ export function App() {
         onOpenWalkthrough={() => setIsWalkthroughOpen(true)}
         unreadAlertCount={notifications.filter(n => n.status === 'DELIVERED_SIMULATED').length}
         onResetSeedData={handleResetSeedData}
+        backendConnected={backendConnected}
       />
+
+      {/* Authoritative Relational Backend Live Toast */}
+      {backendNotice && (
+        <div className="bg-[#0a2540] text-white px-4 py-2.5 text-xs font-mono flex items-center justify-between border-b border-emerald-500 shadow-sm">
+          <div className="flex items-center gap-2 max-w-7xl mx-auto w-full">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="font-semibold text-emerald-300">SQLITE RELATIONAL COMMIT:</span>
+            <span>{backendNotice}</span>
+          </div>
+          <button
+            onClick={() => setBackendNotice(null)}
+            className="text-slate-400 hover:text-white px-2"
+            aria-label="Dismiss notification"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Primary Tab Navigation */}
       <Navigation
