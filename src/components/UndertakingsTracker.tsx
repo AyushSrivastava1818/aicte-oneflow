@@ -1,29 +1,23 @@
 import React, { useState } from 'react';
-import { Role, Undertaking } from '../types';
+import { Undertaking } from '../types';
 import { 
   FileCheck, 
   Upload, 
   CheckCircle2, 
   AlertOctagon, 
   Clock, 
-  FileText, 
-  ArrowUpRight, 
-  ShieldAlert,
-  RotateCcw,
-  Check
+  FileText 
 } from 'lucide-react';
 import { calculateDaysRemaining } from '../services/workflowEngine';
 
 interface UndertakingsTrackerProps {
   undertakings: Undertaking[];
-  currentRole: Role;
   onUploadEvidence: (id: string, fileName: string) => void;
   onVerifyUndertaking: (id: string, verified: boolean, notes: string) => void;
 }
 
 export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
   undertakings,
-  currentRole,
   onUploadEvidence,
   onVerifyUndertaking,
 }) => {
@@ -41,11 +35,11 @@ export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-[#0a2540] flex items-center gap-2">
-            <FileCheck className="w-5 h-5 text-[#0f3c6e]" />
-            <span>Time-Bound Statutory Undertaking & Post-Approval Compliance Register</span>
+            <FileCheck className="w-5 h-5 text-[#0f3c6e]" aria-hidden="true" />
+            <span>Time-Bound Statutory Undertaking & Compliance Register</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Key Architectural Rule: Document submission does not equate to verified compliance. Submissions require explicit Bureau scrutiny.
+            Key Architectural Rule: <strong>Document submission does not equate to compliance.</strong> Submissions require explicit Bureau scrutiny.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs">
@@ -64,7 +58,7 @@ export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
             <span>Compliance Status</span>
           </div>
 
-          <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
+          <div className="overflow-y-auto flex-1 divide-y divide-slate-100" role="list">
             {undertakings.map((u) => {
               const isSelected = u.id === selectedUnd?.id;
               const daysLeft = calculateDaysRemaining(u.dueDate);
@@ -74,7 +68,10 @@ export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
                 <div
                   key={u.id}
                   onClick={() => setSelectedUndertakingId(u.id)}
-                  className={`p-3.5 transition-all cursor-pointer ${
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setSelectedUndertakingId(u.id); }}
+                  className={`p-3.5 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-600 ${
                     isSelected ? 'bg-blue-50/80 border-l-4 border-[#0f3c6e]' : 'hover:bg-slate-50 border-l-4 border-transparent'
                   }`}
                 >
@@ -92,9 +89,9 @@ export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
                     </span>
                   </div>
 
-                  <h5 className="text-xs font-semibold text-slate-800 line-clamp-1 mb-1">
+                  <h4 className="text-xs font-semibold text-slate-800 line-clamp-1 mb-1">
                     {u.title}
-                  </h5>
+                  </h4>
 
                   <div className="text-[11px] text-slate-500 line-clamp-1 mb-2">
                     {u.institutionName}
@@ -104,7 +101,7 @@ export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
                     <span>Due: {new Date(u.dueDate).toLocaleDateString()}</span>
                     {isOverdue ? (
                       <span className="text-red-600 font-bold flex items-center gap-0.5">
-                        <AlertOctagon className="w-3 h-3" /> Overdue
+                        <AlertOctagon className="w-3 h-3" aria-hidden="true" /> Overdue
                       </span>
                     ) : (
                       <span className="text-slate-600 font-medium">
@@ -151,9 +148,14 @@ export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
               <div className="p-3.5 bg-slate-50 border border-slate-200 rounded text-xs space-y-1">
                 <span className="font-bold text-slate-800 block">Statutory Source Condition:</span>
                 <p className="text-slate-700 leading-relaxed">{selectedUnd.statutoryCondition}</p>
-                <span className="text-[10px] text-slate-500 font-mono block mt-1">
-                  Enforced under: {selectedUnd.aphClause}
-                </span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    Enforced under: {selectedUnd.aphClause}
+                  </span>
+                  <span className="text-[9px] bg-emerald-100 text-emerald-800 font-semibold px-1.5 rounded">
+                    {selectedUnd.provenance}
+                  </span>
+                </div>
               </div>
 
               {/* Submitted Evidence Section */}
@@ -166,7 +168,7 @@ export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
                   <div className="p-3 bg-blue-50/70 border border-blue-200 rounded text-xs space-y-1.5">
                     <div className="flex justify-between items-center">
                       <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-[#0f3c6e]" />
+                        <FileText className="w-4 h-4 text-[#0f3c6e]" aria-hidden="true" />
                         <span className="font-bold text-slate-900">{selectedUnd.evidenceDocName}</span>
                         <span className="text-[10px] text-slate-500">({selectedUnd.evidenceDocSize})</span>
                       </div>
@@ -184,7 +186,7 @@ export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
                 ) : (
                   <div className="p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-900 flex items-center justify-between">
                     <span className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-amber-700" />
+                      <Clock className="w-4 h-4 text-amber-700" aria-hidden="true" />
                       <span>Pending evidence submission from institution.</span>
                     </span>
                   </div>
@@ -193,8 +195,8 @@ export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
 
               {/* Escalation Matrix Indicator */}
               {selectedUnd.escalationLevel > 0 && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded text-xs text-red-900 flex items-center gap-2">
-                  <AlertOctagon className="w-4 h-4 text-red-700 flex-shrink-0" />
+                <div className="p-3 bg-red-50 border border-red-200 rounded text-xs text-red-900 flex items-center gap-2" role="alert">
+                  <AlertOctagon className="w-4 h-4 text-red-700 flex-shrink-0" aria-hidden="true" />
                   <div>
                     <strong className="font-bold">Active SLA Escalation (Level {selectedUnd.escalationLevel}):</strong>
                     <p className="text-[11px]">
@@ -208,22 +210,20 @@ export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
 
               {/* Actions Console */}
               <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2.5">
-                {/* Institution Upload */}
                 <button
                   onClick={() => setShowUploadModal(true)}
-                  className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5"
+                  className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
                 >
-                  <Upload className="w-3.5 h-3.5" />
+                  <Upload className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Upload / Replace Evidence PDF</span>
                 </button>
 
-                {/* Scrutiny / RO Verification */}
                 {selectedUnd.evidenceDocName && selectedUnd.status !== 'VERIFIED_COMPLIANT' && (
                   <button
                     onClick={() => setShowVerifyModal(true)}
-                    className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5"
+                    className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
                   >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Officer Verification & Sign-off</span>
                   </button>
                 )}
@@ -235,18 +235,26 @@ export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
 
       {/* Modal: Upload Evidence */}
       {showUploadModal && selectedUnd && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div 
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="upload-modal-title"
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5 space-y-4 border border-slate-200">
-            <h3 className="text-sm font-bold text-[#0a2540] border-b border-slate-100 pb-2">
+            <h3 id="upload-modal-title" className="text-sm font-bold text-[#0a2540] border-b border-slate-100 pb-2">
               Upload Compliance Supporting Evidence
             </h3>
             <div className="space-y-3 text-xs">
               <p className="text-slate-600">
-                Upload verified gazette, sub-registrar deed, or municipal clearance certificate (PDF format, max 10MB).
+                Upload verified deed or certificate (PDF format, max 10MB).
               </p>
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Evidence Document Name</label>
+                <label htmlFor="evidence-name-input" className="font-semibold text-slate-700 block mb-1">
+                  Evidence Document Name
+                </label>
                 <input
+                  id="evidence-name-input"
                   type="text"
                   placeholder="e.g. Registered_Lease_Extension_Deed_2026.pdf"
                   value={uploadFileName}
@@ -280,18 +288,26 @@ export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
 
       {/* Modal: Officer Verification */}
       {showVerifyModal && selectedUnd && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div 
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="verify-modal-title"
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5 space-y-4 border border-slate-200">
-            <h3 className="text-sm font-bold text-[#0a2540] border-b border-slate-100 pb-2">
+            <h3 id="verify-modal-title" className="text-sm font-bold text-[#0a2540] border-b border-slate-100 pb-2">
               Regulatory Officer Verification
             </h3>
             <div className="space-y-3 text-xs">
               <p className="text-slate-600">
-                Examine evidence document <strong>{selectedUnd.evidenceDocName}</strong> against APH 2026-27 rules.
+                Examine evidence document <strong>{selectedUnd.evidenceDocName}</strong> against APH norms.
               </p>
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Verification Findings & Order Remarks</label>
+                <label htmlFor="verify-notes-input" className="font-semibold text-slate-700 block mb-1">
+                  Verification Findings & Order Remarks
+                </label>
                 <textarea
+                  id="verify-notes-input"
                   rows={3}
                   value={verificationNotes}
                   onChange={(e) => setVerificationNotes(e.target.value)}

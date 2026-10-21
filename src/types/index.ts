@@ -1,3 +1,7 @@
+import { ConflictCheckStatus, DeadlineType, ProvenanceStatus } from './regulatory';
+
+export * from './regulatory';
+
 export type Role = 
   | 'CENTRAL_ADMIN' 
   | 'REGIONAL_OFFICER' 
@@ -51,9 +55,12 @@ export interface Application {
   applicationType: 'New Technical Institution' | 'Extension of Approval (EoA)' | 'Increase in Intake' | 'Course Addition';
   route: ApplicationRoute;
   currentStage: WorkflowStage;
-  ruleVersion: string; // e.g. "APH-2026-27-v1.4"
+  ruleVersion: string; // e.g. "APH-2024-27-v1.4"
+  ruleProvenance: ProvenanceStatus;
   submittedAt: string;
-  slaDeadline: string; // Statutory timeline
+  slaDeadline: string; // Statutory or configured deadline in IST
+  deadlineType: DeadlineType;
+  deadlineCalculationBasis: string;
   assignedOfficer: string;
   assignedRole: Role;
   deficiencies: Deficiency[];
@@ -68,6 +75,16 @@ export interface Application {
   lastActionTimestamp: string;
 }
 
+export interface CommitteeExpert {
+  id: string;
+  name: string;
+  designation: string;
+  institution: string;
+  state: string;
+  specialization: string;
+  hasAffiliationWithTrust: boolean;
+}
+
 export interface EVCRecord {
   id: string;
   applicationId: string;
@@ -76,14 +93,10 @@ export interface EVCRecord {
   region: string;
   scheduledDate: string | null;
   coordinatorName: string;
-  committeeExperts: Array<{
-    name: string;
-    designation: string;
-    institution: string;
-    state: string;
-    specialization: string;
-  }>;
-  conflictCheckPassed: boolean;
+  committeeExperts: CommitteeExpert[];
+  conflictCheckStatus: ConflictCheckStatus;
+  conflictCheckScope: string;
+  conflictCheckNotes?: string;
   readinessChecks: {
     facultyRosterSubmitted: boolean;
     landGeoCoordsVerified: boolean;
@@ -105,8 +118,10 @@ export interface Undertaking {
   title: string;
   statutoryCondition: string;
   aphClause: string;
+  provenance: ProvenanceStatus;
   issuedDate: string;
   dueDate: string;
+  deadlineType: DeadlineType;
   status: 'PENDING_SUBMISSION' | 'SUBMITTED_UNDER_REVIEW' | 'RETURNED_FOR_CORRECTION' | 'VERIFIED_COMPLIANT' | 'OVERDUE_ESCALATED';
   evidenceDocName?: string;
   evidenceDocSize?: string;
@@ -135,6 +150,8 @@ export interface PrescribedDocument {
     extractedPlotSurveyNo: string;
     confidenceScore: number;
     humanConfirmed: boolean;
+    confirmedBy?: string;
+    confirmedAt?: string;
   };
   fileSize: string;
   lastRenewedDate?: string;
@@ -149,9 +166,12 @@ export interface NotificationLog {
   bodyPreview: string;
   channel: 'OFFICIAL_PORTAL_ALERT' | 'GOV_SMS_GATEWAY' | 'NIC_EMAIL';
   timestamp: string;
-  status: 'DELIVERED' | 'ACKNOWLEDGED' | 'ESCALATED';
+  status: 'QUEUED' | 'SENT_SIMULATED' | 'DELIVERED_SIMULATED' | 'ACKNOWLEDGED' | 'ESCALATED' | 'SUPPRESSED_RESOLVED';
   escalationLevel: 'DESK_OFFICER' | 'REGIONAL_DIRECTOR' | 'MEMBER_SECRETARY';
   idempotencyKey: string;
+  attemptCount: number;
+  lastAttemptAt?: string;
+  obligationStillOpen: boolean;
 }
 
 export interface CryptographicAuditRecord {
@@ -168,6 +188,9 @@ export interface CryptographicAuditRecord {
   ruleVersion: string;
   reasonOrObservations: string;
   ipAddress: string;
+  canonicalPayload: string;
+  algorithm: 'SHA-256';
+  schemaVersion: '1.2';
   previousHash: string;
   currentHash: string;
 }

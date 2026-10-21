@@ -1,27 +1,20 @@
 import React, { useState } from 'react';
-import { PrescribedDocument, Role } from '../types';
+import { PrescribedDocument } from '../types';
 import { 
   CalendarClock, 
-  FileCheck2, 
-  AlertTriangle, 
-  CheckCircle2, 
   FileSearch, 
   Upload, 
-  ShieldCheck,
-  Eye,
-  Building2
+  ShieldCheck 
 } from 'lucide-react';
 
 interface DocumentRadarProps {
   documents: PrescribedDocument[];
-  currentRole: Role;
   onConfirmOCR: (docId: string) => void;
   onSubmitRenewal: (docId: string, newExpiry: string, newNumber: string) => void;
 }
 
 export const DocumentRadar: React.FC<DocumentRadarProps> = ({
   documents,
-  currentRole,
   onConfirmOCR,
   onSubmitRenewal,
 }) => {
@@ -47,17 +40,17 @@ export const DocumentRadar: React.FC<DocumentRadarProps> = ({
       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-[#0a2540] flex items-center gap-2">
-            <CalendarClock className="w-5 h-5 text-[#0f3c6e]" />
+            <CalendarClock className="w-5 h-5 text-[#0f3c6e]" aria-hidden="true" />
             <span>Prescribed Document Validity & Lease Expiry Radar</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Real-time validity surveillance for Registered 30-Year Land Leases, State Fire NOCs, Building Safety Certificates, and Trust Deeds.
+            Operational surveillance for Registered Land Leases, State Fire NOCs, Building Safety Certificates, and Trust Deeds.
           </p>
         </div>
 
         {/* Filter intervals */}
         <div className="flex items-center gap-1.5 text-xs bg-slate-100 p-1 rounded">
-          <span className="text-slate-500 font-semibold px-2">Radar Window:</span>
+          <span className="text-slate-500 font-semibold px-2">Operational Window:</span>
           {(['ALL', '7D', '30D', '60D', '90D'] as const).map((period) => (
             <button
               key={period}
@@ -83,7 +76,7 @@ export const DocumentRadar: React.FC<DocumentRadarProps> = ({
             <span>Validity</span>
           </div>
 
-          <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
+          <div className="overflow-y-auto flex-1 divide-y divide-slate-100" role="list">
             {filteredDocs.map((doc) => {
               const isSelected = doc.id === selectedDoc?.id;
               const isCrit = doc.daysRemaining <= 7;
@@ -93,7 +86,10 @@ export const DocumentRadar: React.FC<DocumentRadarProps> = ({
                 <div
                   key={doc.id}
                   onClick={() => setSelectedDocId(doc.id)}
-                  className={`p-3.5 transition-all cursor-pointer ${
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setSelectedDocId(doc.id); }}
+                  className={`p-3.5 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-600 ${
                     isSelected ? 'bg-blue-50/80 border-l-4 border-[#0f3c6e]' : 'hover:bg-slate-50 border-l-4 border-transparent'
                   }`}
                 >
@@ -108,9 +104,9 @@ export const DocumentRadar: React.FC<DocumentRadarProps> = ({
                     </span>
                   </div>
 
-                  <h5 className="text-xs font-semibold text-slate-800 line-clamp-1 mb-1">
+                  <h4 className="text-xs font-semibold text-slate-800 line-clamp-1 mb-1">
                     {doc.institutionName}
-                  </h5>
+                  </h4>
 
                   <div className="text-[11px] text-slate-500 flex justify-between items-center mt-2">
                     <span className="font-mono text-slate-600 truncate max-w-[180px]">
@@ -174,14 +170,14 @@ export const DocumentRadar: React.FC<DocumentRadarProps> = ({
               <div className="p-4 bg-slate-900 text-white rounded-lg border border-slate-800 space-y-3">
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                   <div className="flex items-center gap-2">
-                    <FileSearch className="w-4 h-4 text-amber-400" />
+                    <FileSearch className="w-4 h-4 text-amber-400" aria-hidden="true" />
                     <span className="text-xs font-bold tracking-wide text-amber-400 uppercase">
-                      Assisted Document Intelligence (OCR Extractor Preview)
+                      Assisted Document Intelligence (OCR Extractor Candidate Fields)
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">
-                      OCR Confidence: {selectedDoc.ocrExtraction.confidenceScore}%
+                      Confidence: {selectedDoc.ocrExtraction.confidenceScore}%
                     </span>
                   </div>
                 </div>
@@ -205,21 +201,21 @@ export const DocumentRadar: React.FC<DocumentRadarProps> = ({
                   </div>
                 </div>
 
-                {/* Human-In-The-Loop Validation Safeguard (Mandatory SIH Rule!) */}
+                {/* Human-In-The-Loop Validation Safeguard */}
                 <div className="pt-2 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs">
                   <div className="flex items-center gap-2 text-slate-300 text-[11px]">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <span>Human-in-the-loop: Regulatory officer must verify extracted values against scan.</span>
+                    <ShieldCheck className="w-4 h-4 text-emerald-400 flex-shrink-0" aria-hidden="true" />
+                    <span>Human-in-the-loop: Regulatory officer must verify extracted values against scan before update.</span>
                   </div>
 
                   {selectedDoc.ocrExtraction.humanConfirmed ? (
                     <span className="text-emerald-400 font-bold flex items-center gap-1 text-[11px]">
-                      ✓ Officer Confirmed
+                      ✓ Confirmed by {selectedDoc.ocrExtraction.confirmedBy || 'Authorized Officer'}
                     </span>
                   ) : (
                     <button
                       onClick={() => onConfirmOCR(selectedDoc.id)}
-                      className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-semibold text-[11px]"
+                      className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-semibold text-[11px] focus-visible:ring-2 focus-visible:ring-amber-400"
                     >
                       Confirm Extracted Metadata
                     </button>
@@ -231,9 +227,9 @@ export const DocumentRadar: React.FC<DocumentRadarProps> = ({
               <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2.5">
                 <button
                   onClick={() => setShowRenewalModal(true)}
-                  className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5"
+                  className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
                 >
-                  <Upload className="w-3.5 h-3.5" />
+                  <Upload className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Submit Registered Renewal Document</span>
                 </button>
               </div>
@@ -244,15 +240,23 @@ export const DocumentRadar: React.FC<DocumentRadarProps> = ({
 
       {/* Modal: Renewal Submission */}
       {showRenewalModal && selectedDoc && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div 
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="renewal-modal-title"
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5 space-y-4 border border-slate-200">
-            <h3 className="text-sm font-bold text-[#0a2540] border-b border-slate-100 pb-2">
+            <h3 id="renewal-modal-title" className="text-sm font-bold text-[#0a2540] border-b border-slate-100 pb-2">
               Submit Renewal for {selectedDoc.docType}
             </h3>
             <div className="space-y-3 text-xs">
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">New Registered Document Number</label>
+                <label htmlFor="renewal-doc-num" className="font-semibold text-slate-700 block mb-1">
+                  New Registered Document Number
+                </label>
                 <input
+                  id="renewal-doc-num"
                   type="text"
                   value={renewalDocNumber}
                   onChange={(e) => setRenewalDocNumber(e.target.value)}
@@ -261,8 +265,11 @@ export const DocumentRadar: React.FC<DocumentRadarProps> = ({
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Extended Expiry Date</label>
+                <label htmlFor="renewal-expiry-date" className="font-semibold text-slate-700 block mb-1">
+                  Extended Expiry Date
+                </label>
                 <input
+                  id="renewal-expiry-date"
                   type="date"
                   value={renewalExpiry}
                   onChange={(e) => setRenewalExpiry(e.target.value)}

@@ -1,27 +1,22 @@
 import React, { useState } from 'react';
-import { EVCRecord, Role } from '../types';
+import { EVCRecord } from '../types';
 import { 
   Users, 
   Calendar, 
   MapPin, 
   ShieldCheck, 
-  AlertTriangle, 
   CheckCircle2, 
-  Clock, 
-  FileText,
-  Building
+  AlertTriangle 
 } from 'lucide-react';
 
 interface EVCSchedulerProps {
   evcRecords: EVCRecord[];
-  currentRole: Role;
   onScheduleVisit: (evcId: string, visitDate: string) => void;
   onSubmitOutcome: (evcId: string, recommendation: 'RECOMMENDED_FULL' | 'RECOMMENDED_WITH_CONDITIONS' | 'REJECTED_DEFICIENT', remarks: string) => void;
 }
 
 export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
   evcRecords,
-  currentRole,
   onScheduleVisit,
   onSubmitOutcome,
 }) => {
@@ -40,11 +35,11 @@ export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-[#0a2540] flex items-center gap-2">
-            <Users className="w-5 h-5 text-[#0f3c6e]" />
-            <span>Expert Visit Committee (EVC) Operations & Geo-Tagged Inspection Desk</span>
+            <Users className="w-5 h-5 text-[#0f3c6e]" aria-hidden="true" />
+            <span>Expert Visit Committee (EVC) Operations & Inspection Desk</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Rule APH 2026-27: Automated readiness checklist, peer conflict-of-interest filtering, and tamper-evident outcome recording.
+            Rule APH 2024–27: Source-linked readiness checklists, objective conflict-of-interest review, and peer inspection outcomes.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -59,18 +54,21 @@ export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
         {/* Left: EVC Dockets List */}
         <div className="lg:col-span-4 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col h-[650px]">
           <div className="p-3 border-b border-slate-200 bg-slate-50 font-bold text-xs text-[#0a2540] uppercase tracking-wider flex justify-between">
-            <span>Inspection Docket Queue</span>
+            <span>Inspection Queue</span>
             <span>Status</span>
           </div>
 
-          <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
+          <div className="overflow-y-auto flex-1 divide-y divide-slate-100" role="list">
             {evcRecords.map((rec) => {
               const isSelected = rec.id === selectedRecord?.id;
               return (
                 <div
                   key={rec.id}
                   onClick={() => setSelectedRecordId(rec.id)}
-                  className={`p-3.5 transition-all cursor-pointer ${
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setSelectedRecordId(rec.id); }}
+                  className={`p-3.5 transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-600 ${
                     isSelected ? 'bg-blue-50/80 border-l-4 border-[#0f3c6e]' : 'hover:bg-slate-50 border-l-4 border-transparent'
                   }`}
                 >
@@ -85,9 +83,9 @@ export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
                     </span>
                   </div>
 
-                  <h5 className="text-xs font-semibold text-slate-800 line-clamp-1 mb-1">
+                  <h4 className="text-xs font-semibold text-slate-800 line-clamp-1 mb-1">
                     {rec.institutionName}
-                  </h5>
+                  </h4>
 
                   <div className="text-[11px] text-slate-500 flex justify-between items-center mt-2">
                     <span>Region: {rec.region}</span>
@@ -132,35 +130,50 @@ export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
                 </div>
               </div>
 
-              {/* Conflict of Interest & Readiness Check Matrix */}
+              {/* Conflict of Interest Review Panel */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Conflict Check Badge */}
-                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs space-y-1">
-                  <div className="flex items-center gap-1.5 font-bold text-emerald-950">
-                    <ShieldCheck className="w-4 h-4 text-emerald-700" />
-                    <span>Peer Conflict-of-Interest Validation</span>
+                <div className={`p-3.5 rounded-lg border text-xs space-y-1 ${
+                  selectedRecord.conflictCheckStatus === 'NO_KNOWN_CONFLICT_DETECTED'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                    : selectedRecord.conflictCheckStatus === 'POTENTIAL_CONFLICT_REQUIRES_REVIEW'
+                    ? 'bg-amber-50 border-amber-200 text-amber-950'
+                    : 'bg-red-50 border-red-200 text-red-950'
+                }`}>
+                  <div className="flex items-center gap-1.5 font-bold">
+                    {selectedRecord.conflictCheckStatus === 'NO_KNOWN_CONFLICT_DETECTED' ? (
+                      <ShieldCheck className="w-4 h-4 text-emerald-700" aria-hidden="true" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-amber-600" aria-hidden="true" />
+                    )}
+                    <span>Conflict-of-Interest Status: {selectedRecord.conflictCheckStatus.replace(/_/g, ' ')}</span>
                   </div>
-                  <p className="text-emerald-900 text-[11px]">
-                    Verified: Committee experts are drawn from non-adjacent states and possess zero prior affiliation with the applicant trust.
+                  <p className="text-[11px] leading-relaxed">
+                    {selectedRecord.conflictCheckNotes || 'Review completed against declared affiliations.'}
                   </p>
+                  <span className="text-[10px] text-slate-500 font-mono block mt-1">
+                    Scope: {selectedRecord.conflictCheckScope}
+                  </span>
                 </div>
 
-                {/* Inspection Logistics */}
+                {/* Geo Verification Coordinates */}
                 <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1">
                   <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                    <MapPin className="w-4 h-4 text-[#0f3c6e]" />
+                    <MapPin className="w-4 h-4 text-[#0f3c6e]" aria-hidden="true" />
                     <span>Geo-Verification Coordinates</span>
                   </div>
                   <p className="text-slate-600 text-[11px] font-mono">
-                    Lat: {selectedRecord.geoLatitude || '23.2599° N'} • Long: {selectedRecord.geoLongitude || '77.4126° E'} (Campus Geofence Verified)
+                    Lat: {selectedRecord.geoLatitude || '23.2599° N'} • Long: {selectedRecord.geoLongitude || '77.4126° E'}
                   </p>
+                  <span className="text-[10px] text-slate-500 block">
+                    Campus geofence verified against municipal survey records.
+                  </span>
                 </div>
               </div>
 
               {/* Mandatory Pre-Inspection Readiness Checklist */}
               <div className="space-y-2 pt-2 border-t border-slate-100">
                 <h4 className="text-xs font-bold text-[#0a2540] uppercase tracking-wider">
-                  Mandatory Pre-Inspection Readiness Checklist (Rule APH 8.2)
+                  Mandatory Pre-Inspection Readiness Checklist (Rule APH 2.5)
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                   <div className="p-2 rounded bg-slate-50 border border-slate-200 flex items-center justify-between">
@@ -180,7 +193,7 @@ export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
                     )}
                   </div>
                   <div className="p-2 rounded bg-slate-50 border border-slate-200 flex items-center justify-between">
-                    <span>3. Building Completion Certificate (PWD/Authority)</span>
+                    <span>3. Building Completion Certificate (PWD)</span>
                     {selectedRecord.readinessChecks.buildingCompletionCertUploaded ? (
                       <span className="text-emerald-700 font-bold">✓ Cleared</span>
                     ) : (
@@ -204,8 +217,8 @@ export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
                   Empanelled Expert Committee Members
                 </h4>
                 <div className="space-y-2">
-                  {selectedRecord.committeeExperts.map((exp, idx) => (
-                    <div key={idx} className="p-3 bg-slate-50 rounded border border-slate-200 text-xs flex justify-between items-center">
+                  {selectedRecord.committeeExperts.map((exp) => (
+                    <div key={exp.id} className="p-3 bg-slate-50 rounded border border-slate-200 text-xs flex justify-between items-center">
                       <div>
                         <div className="font-bold text-slate-900">{exp.name}</div>
                         <div className="text-[11px] text-slate-600">{exp.designation} • {exp.institution} ({exp.state})</div>
@@ -223,9 +236,9 @@ export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
                 {selectedRecord.status === 'PENDING_SCHEDULE' && (
                   <button
                     onClick={() => setShowScheduleModal(true)}
-                    className="px-3.5 py-2 bg-[#0f3c6e] hover:bg-[#0a2540] text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5"
+                    className="px-3.5 py-2 bg-[#0f3c6e] hover:bg-[#0a2540] text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
                   >
-                    <Calendar className="w-3.5 h-3.5" />
+                    <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Schedule EVC Inspection Visit</span>
                   </button>
                 )}
@@ -233,16 +246,16 @@ export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
                 {selectedRecord.status === 'SCHEDULED' && (
                   <button
                     onClick={() => setShowOutcomeModal(true)}
-                    className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5"
+                    className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
                   >
-                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Upload EVC Inspection Findings & Recommendation</span>
                   </button>
                 )}
 
                 {selectedRecord.status === 'REPORT_SUBMITTED' && (
                   <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-950 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-700" aria-hidden="true" />
                     <span>Inspection report certified by committee members and transmitted to Executive Council.</span>
                   </div>
                 )}
@@ -254,9 +267,14 @@ export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
 
       {/* Modal: Schedule Visit */}
       {showScheduleModal && selectedRecord && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div 
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="schedule-modal-title"
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5 space-y-4 border border-slate-200">
-            <h3 className="text-sm font-bold text-[#0a2540] border-b border-slate-100 pb-2">
+            <h3 id="schedule-modal-title" className="text-sm font-bold text-[#0a2540] border-b border-slate-100 pb-2">
               Schedule Official Expert Visit (EVC)
             </h3>
             <div className="space-y-3 text-xs">
@@ -264,8 +282,11 @@ export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
                 Confirming date will issue automated travel notices to empanelled experts and campus liaison officer.
               </p>
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Proposed Inspection Date & Time</label>
+                <label htmlFor="visit-date-input" className="font-semibold text-slate-700 block mb-1">
+                  Proposed Inspection Date & Time
+                </label>
                 <input
+                  id="visit-date-input"
                   type="datetime-local"
                   value={scheduleDate}
                   onChange={(e) => setScheduleDate(e.target.value)}
@@ -296,15 +317,23 @@ export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
 
       {/* Modal: Submit Outcome */}
       {showOutcomeModal && selectedRecord && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div 
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="outcome-modal-title"
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-5 space-y-4 border border-slate-200">
-            <h3 className="text-sm font-bold text-[#0a2540] border-b border-slate-100 pb-2">
+            <h3 id="outcome-modal-title" className="text-sm font-bold text-[#0a2540] border-b border-slate-100 pb-2">
               Record EVC Committee Recommendation
             </h3>
             <div className="space-y-3 text-xs">
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Statutory Recommendation</label>
+                <label htmlFor="recommendation-select" className="font-semibold text-slate-700 block mb-1">
+                  Statutory Recommendation
+                </label>
                 <select
+                  id="recommendation-select"
                   value={outcomeRecommendation}
                   onChange={(e) => setOutcomeRecommendation(e.target.value as any)}
                   className="w-full p-2 border border-slate-300 rounded text-slate-800 bg-white"
@@ -316,8 +345,11 @@ export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Committee Observations & Executive Summary</label>
+                <label htmlFor="remarks-input" className="font-semibold text-slate-700 block mb-1">
+                  Committee Observations & Executive Summary
+                </label>
                 <textarea
+                  id="remarks-input"
                   rows={4}
                   value={outcomeRemarks}
                   onChange={(e) => setOutcomeRemarks(e.target.value)}

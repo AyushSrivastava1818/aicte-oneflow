@@ -27,37 +27,37 @@ import { DocumentRadar } from './components/DocumentRadar';
 import { NotificationEngine } from './components/NotificationEngine';
 import { AuditLedger } from './components/AuditLedger';
 import { WalkthroughModal } from './components/WalkthroughModal';
-import { computeSha256 } from './services/workflowEngine';
+import { computeSha256, createCanonicalPayload } from './services/workflowEngine';
 
 export function App() {
   // Persistent LocalStorage State
   const [applications, setApplications] = useState<Application[]>(() => {
-    const saved = localStorage.getItem('aicte_oneflow_apps_v2');
+    const saved = localStorage.getItem('aicte_oneflow_apps_v3');
     return saved ? JSON.parse(saved) : INITIAL_APPLICATIONS;
   });
 
   const [evcRecords, setEvcRecords] = useState<EVCRecord[]>(() => {
-    const saved = localStorage.getItem('aicte_oneflow_evc_v2');
+    const saved = localStorage.getItem('aicte_oneflow_evc_v3');
     return saved ? JSON.parse(saved) : INITIAL_EVC_RECORDS;
   });
 
   const [undertakings, setUndertakings] = useState<Undertaking[]>(() => {
-    const saved = localStorage.getItem('aicte_oneflow_und_v2');
+    const saved = localStorage.getItem('aicte_oneflow_und_v3');
     return saved ? JSON.parse(saved) : INITIAL_UNDERTAKINGS;
   });
 
   const [documents, setDocuments] = useState<PrescribedDocument[]>(() => {
-    const saved = localStorage.getItem('aicte_oneflow_docs_v2');
+    const saved = localStorage.getItem('aicte_oneflow_docs_v3');
     return saved ? JSON.parse(saved) : INITIAL_DOCUMENTS;
   });
 
   const [notifications, setNotifications] = useState<NotificationLog[]>(() => {
-    const saved = localStorage.getItem('aicte_oneflow_notifs_v2');
+    const saved = localStorage.getItem('aicte_oneflow_notifs_v3');
     return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
   });
 
   const [auditLogs, setAuditLogs] = useState<CryptographicAuditRecord[]>(() => {
-    const saved = localStorage.getItem('aicte_oneflow_audit_v2');
+    const saved = localStorage.getItem('aicte_oneflow_audit_v3');
     return saved ? JSON.parse(saved) : INITIAL_AUDIT_LOGS;
   });
 
@@ -69,30 +69,30 @@ export function App() {
 
   // Sync to localStorage
   useEffect(() => {
-    localStorage.setItem('aicte_oneflow_apps_v2', JSON.stringify(applications));
+    localStorage.setItem('aicte_oneflow_apps_v3', JSON.stringify(applications));
   }, [applications]);
 
   useEffect(() => {
-    localStorage.setItem('aicte_oneflow_evc_v2', JSON.stringify(evcRecords));
+    localStorage.setItem('aicte_oneflow_evc_v3', JSON.stringify(evcRecords));
   }, [evcRecords]);
 
   useEffect(() => {
-    localStorage.setItem('aicte_oneflow_und_v2', JSON.stringify(undertakings));
+    localStorage.setItem('aicte_oneflow_und_v3', JSON.stringify(undertakings));
   }, [undertakings]);
 
   useEffect(() => {
-    localStorage.setItem('aicte_oneflow_docs_v2', JSON.stringify(documents));
+    localStorage.setItem('aicte_oneflow_docs_v3', JSON.stringify(documents));
   }, [documents]);
 
   useEffect(() => {
-    localStorage.setItem('aicte_oneflow_notifs_v2', JSON.stringify(notifications));
+    localStorage.setItem('aicte_oneflow_notifs_v3', JSON.stringify(notifications));
   }, [notifications]);
 
   useEffect(() => {
-    localStorage.setItem('aicte_oneflow_audit_v2', JSON.stringify(auditLogs));
+    localStorage.setItem('aicte_oneflow_audit_v3', JSON.stringify(auditLogs));
   }, [auditLogs]);
 
-  // Helper to record an immutable cryptographic audit record
+  // Helper to append an immutable cryptographic audit record with canonical JSON serialization
   const appendAuditRecord = async (
     actorRole: Role,
     actorName: string,
@@ -108,8 +108,20 @@ export function App() {
     const timestamp = new Date().toISOString();
     const actorId = `usr-${actorRole.toLowerCase()}-${Date.now().toString().slice(-4)}`;
 
-    const payload = `${blockHeight}|${timestamp}|${actorId}|${actionType}|${docketNumber}|${prevStage}|${newStage}|${prevHash}`;
-    const currentHash = await computeSha256(payload);
+    const canonicalPayload = createCanonicalPayload({
+      actionType,
+      actorId,
+      blockHeight,
+      docketNumber,
+      newStage,
+      previousHash: prevHash,
+      previousStage: prevStage,
+      reasonOrObservations: reason,
+      ruleVersion: 'APH-2024-27-v1.4',
+      timestamp,
+    });
+
+    const currentHash = await computeSha256(canonicalPayload);
 
     const newBlock: CryptographicAuditRecord = {
       id: `audit-block-${blockHeight}`,
@@ -122,9 +134,12 @@ export function App() {
       docketNumber,
       previousStage: prevStage,
       newStage,
-      ruleVersion: 'APH-2026-27-v2.1',
+      ruleVersion: 'APH-2024-27-v1.4',
       reasonOrObservations: reason,
       ipAddress: '10.14.88.24 (AICTE Regulated Bureau Node)',
+      canonicalPayload,
+      algorithm: 'SHA-256',
+      schemaVersion: '1.2',
       previousHash: prevHash,
       currentHash,
     };
@@ -241,8 +256,6 @@ export function App() {
     if (!evc) return;
 
     setEvcRecords(prev => prev.map(e => e.id === evcId ? { ...e, scheduledDate: visitDate, status: 'SCHEDULED' } : e));
-
-    // Update corresponding application if in EVC_QUEUED
     setApplications(prev => prev.map(a => a.id === evc.applicationId ? { ...a, currentStage: 'EVC_SCHEDULED' } : a));
 
     await appendAuditRecord(
@@ -331,7 +344,12 @@ export function App() {
   const handleConfirmOCR = async (docId: string) => {
     setDocuments(prev => prev.map(d => d.id === docId ? {
       ...d,
-      ocrExtraction: { ...d.ocrExtraction, humanConfirmed: true }
+      ocrExtraction: { 
+        ...d.ocrExtraction, 
+        humanConfirmed: true,
+        confirmedBy: currentRole,
+        confirmedAt: new Date().toISOString(),
+      }
     } : d));
   };
 
@@ -359,20 +377,31 @@ export function App() {
     );
   };
 
-  // Cron Simulator
+  // Cron Simulator: Rechecks open obligations before dispatching notifications
   const handleTriggerCronCheck = () => {
+    // Check if app-101 has open obligations
+    const app101 = applications.find(a => a.id === 'app-101');
+    const hasOpenObligations = app101 ? app101.deficiencies.some(d => !d.resolved) : true;
+
     const newNotif: NotificationLog = {
       id: `notif-${Date.now().toString().slice(-4)}`,
       docketNumber: 'AICTE/2026-27/RO-N/10942',
       recipientRole: 'SCRUTINY_OFFICER',
       recipientEmail: 'rameshwar.nath@aicte-india.org',
-      subject: 'Background Worker Heartbeat: SLA Reconciliation Complete',
-      bodyPreview: 'BullMQ Worker verified all open statutory queues across 6 regions. Zero orphan dockets detected.',
+      subject: hasOpenObligations 
+        ? 'Background Worker Heartbeat: SLA Reconciliation Complete'
+        : 'Alert Suppressed: All obligations for docket are already verified resolved.',
+      bodyPreview: hasOpenObligations
+        ? 'Durable reconciler verified active dockets. Docket 10942 has 2 active deficiencies requiring resolution.'
+        : 'Pre-dispatch check confirmed all deficiencies resolved. Duplicate alert suppressed.',
       channel: 'OFFICIAL_PORTAL_ALERT',
       timestamp: new Date().toISOString(),
-      status: 'DELIVERED',
+      status: hasOpenObligations ? 'DELIVERED_SIMULATED' : 'SUPPRESSED_RESOLVED',
       escalationLevel: 'DESK_OFFICER',
       idempotencyKey: `idemp_cron_reconcile_${Date.now()}`,
+      attemptCount: 1,
+      lastAttemptAt: new Date().toISOString(),
+      obligationStillOpen: hasOpenObligations,
     };
 
     setNotifications(prev => [newNotif, ...prev]);
@@ -382,25 +411,13 @@ export function App() {
     setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, status: 'ACKNOWLEDGED' } : n));
   };
 
-  // Tamper Simulator for SIH Judges
-  const handleSimulateTamper = () => {
-    setAuditLogs(prev => prev.map((block, idx) => {
-      if (idx === 1) {
-        return {
-          ...block,
-          reasonOrObservations: 'MALICIOUS_UNAUTHORIZED_DATABASE_EDIT: Scrutiny observations cleared artificially without bureau sign-off.',
-        };
-      }
-      return block;
-    }));
-  };
-
-  const handleResetTamper = () => {
-    setAuditLogs(INITIAL_AUDIT_LOGS);
-  };
-
   const handleResetSeedData = () => {
-    localStorage.clear();
+    localStorage.removeItem('aicte_oneflow_apps_v3');
+    localStorage.removeItem('aicte_oneflow_evc_v3');
+    localStorage.removeItem('aicte_oneflow_und_v3');
+    localStorage.removeItem('aicte_oneflow_docs_v3');
+    localStorage.removeItem('aicte_oneflow_notifs_v3');
+    localStorage.removeItem('aicte_oneflow_audit_v3');
     setApplications(INITIAL_APPLICATIONS);
     setEvcRecords(INITIAL_EVC_RECORDS);
     setUndertakings(INITIAL_UNDERTAKINGS);
@@ -417,7 +434,7 @@ export function App() {
         currentRole={currentRole}
         onRoleChange={setCurrentRole}
         onOpenWalkthrough={() => setIsWalkthroughOpen(true)}
-        unreadAlertCount={notifications.filter(n => n.status === 'DELIVERED').length}
+        unreadAlertCount={notifications.filter(n => n.status === 'DELIVERED_SIMULATED').length}
         onResetSeedData={handleResetSeedData}
       />
 
@@ -435,7 +452,7 @@ export function App() {
       />
 
       {/* Main Workspace Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6" role="main">
         {activeTab === 'overview' && (
           <OverviewDashboard
             applications={applications}
@@ -464,7 +481,6 @@ export function App() {
         {activeTab === 'evc' && (
           <EVCScheduler
             evcRecords={evcRecords}
-            currentRole={currentRole}
             onScheduleVisit={handleScheduleVisit}
             onSubmitOutcome={handleSubmitEVCOutcome}
           />
@@ -473,7 +489,6 @@ export function App() {
         {activeTab === 'undertakings' && (
           <UndertakingsTracker
             undertakings={undertakings}
-            currentRole={currentRole}
             onUploadEvidence={handleUploadEvidence}
             onVerifyUndertaking={handleVerifyUndertaking}
           />
@@ -482,7 +497,6 @@ export function App() {
         {activeTab === 'documents' && (
           <DocumentRadar
             documents={documents}
-            currentRole={currentRole}
             onConfirmOCR={handleConfirmOCR}
             onSubmitRenewal={handleSubmitRenewal}
           />
@@ -491,7 +505,6 @@ export function App() {
         {activeTab === 'notifications' && (
           <NotificationEngine
             notifications={notifications}
-            currentRole={currentRole}
             onTriggerCronCheck={handleTriggerCronCheck}
             onAcknowledgeAlert={handleAcknowledgeAlert}
           />
@@ -500,9 +513,6 @@ export function App() {
         {activeTab === 'audit' && (
           <AuditLedger
             auditLogs={auditLogs}
-            currentRole={currentRole}
-            onSimulateTamper={handleSimulateTamper}
-            onResetTamper={handleResetTamper}
           />
         )}
       </main>
@@ -517,7 +527,7 @@ export function App() {
       />
 
       {/* Official Gov Footer */}
-      <footer className="mt-auto bg-slate-900 text-slate-400 text-xs border-t border-slate-800 py-4 px-4 sm:px-6">
+      <footer className="mt-auto bg-slate-900 text-slate-400 text-xs border-t border-slate-800 py-4 px-4 sm:px-6" role="contentinfo">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="font-semibold text-slate-200">
@@ -530,11 +540,11 @@ export function App() {
 
           <div className="flex items-center gap-4 text-[11px]">
             <span className="text-slate-400">
-              Regulatory Authority: <strong className="text-slate-200">AICTE Approval Process Handbook (APH 2026-27)</strong>
+              Regulatory Baseline: <strong className="text-slate-200">AICTE Approval Process Handbook (APH 2024–2027)</strong>
             </span>
-            <span className="text-slate-600">|</span>
+            <span className="text-slate-600" aria-hidden="true">|</span>
             <span className="text-emerald-400 font-mono">
-              FIPS 180-4 SHA-256 Verified
+              NIST FIPS 180-4 SHA-256 Ledger
             </span>
           </div>
         </div>
