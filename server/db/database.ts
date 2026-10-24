@@ -36,6 +36,40 @@ class AsyncLock {
 
 const writerLock = new AsyncLock();
 
+async function initializeSqlEngine(): Promise<any> {
+  const candidatePaths = [
+    path.resolve(process.cwd(), 'api', 'sql-wasm.wasm'),
+    path.resolve(process.cwd(), 'server', 'db', 'sql-wasm.wasm'),
+  ];
+
+  try {
+    const { createRequire } = await import('module');
+    const req = createRequire(import.meta.url);
+    const nmPath = req.resolve('sql.js/dist/sql-wasm.wasm');
+    candidatePaths.push(nmPath);
+  } catch {}
+
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      try {
+        const wasmBinary = fs.readFileSync(p);
+        return await initSqlJs({ wasmBinary });
+      } catch (e) {
+        console.warn(`[database] Failed loading wasm from ${p}:`, e);
+      }
+    }
+  }
+
+  try {
+    return await initSqlJs();
+  } catch (err) {
+    console.warn('[database] Fallback to remote wasm binary fetch...');
+    const res = await fetch('https://sql.js.org/dist/sql-wasm.wasm');
+    const ab = await res.arrayBuffer();
+    return await initSqlJs({ wasmBinary: Buffer.from(ab) });
+  }
+}
+
 export async function getDatabase(): Promise<SqlJsDatabase> {
   if (db) return db;
 
@@ -46,7 +80,7 @@ export async function getDatabase(): Promise<SqlJsDatabase> {
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
-  const SQL = await initSqlJs();
+  const SQL = await initializeSqlEngine();
 
   if (fs.existsSync(targetFile)) {
     const fileBuffer = fs.readFileSync(targetFile);
@@ -148,10 +182,9 @@ export async function resetDatabase(): Promise<void> {
       fs.mkdirSync(targetDir, { recursive: true });
     }
 
-    const SQL = await initSqlJs();
+    const SQL = await initializeSqlEngine();
     const newDb = new SQL.Database();
-    const schemaSql = fs.readFileSync(SCHEMA_FILE, 'utf-8');
-    newDb.run(schemaSql);
+    newDb.run(SCHEMA_SQL);
     persistToDisk(newDb);
     db = newDb;
   });
