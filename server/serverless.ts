@@ -1,6 +1,6 @@
-import { createApp } from '../server/app';
-import { getDatabase, getDbFilePath } from '../server/db/database';
-import { seedDatabase } from '../server/db/seed';
+import { createApp } from './app';
+import { getDatabase, getDbFilePath } from './db/database';
+import { seedDatabase } from './db/seed';
 import fs from 'fs';
 
 let isInitialized = false;
