@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Application, 
   CryptographicAuditRecord, 
@@ -28,6 +28,14 @@ import { NotificationEngine } from './components/NotificationEngine';
 import { AuditLedger } from './components/AuditLedger';
 import { WalkthroughModal } from './components/WalkthroughModal';
 import { apiClient } from './services/apiClient';
+import { 
+  ROLE_CONFIGS, 
+  isTabAllowed, 
+  filterApplicationsForRole, 
+  filterUndertakingsForRole, 
+  filterDocumentsForRole, 
+  filterNotificationsForRole 
+} from './services/rolePermissions';
 
 export function App() {
   // Persistent LocalStorage / Fallback State
@@ -126,6 +134,32 @@ export function App() {
       isMounted = false;
     };
   }, [currentRole]);
+
+  const roleConfig = ROLE_CONFIGS[currentRole];
+
+  // Auto-switch to default allowed tab if current activeTab is not permitted for the selected role
+  useEffect(() => {
+    if (!isTabAllowed(currentRole, activeTab)) {
+      setActiveTab(ROLE_CONFIGS[currentRole].defaultTab);
+    }
+  }, [currentRole, activeTab]);
+
+  // Compute Scoped Data based on active persona
+  const scopedApplications = useMemo(() => filterApplicationsForRole(applications, currentRole), [applications, currentRole]);
+  const scopedUndertakings = useMemo(() => filterUndertakingsForRole(undertakings, currentRole), [undertakings, currentRole]);
+  const scopedDocuments = useMemo(() => filterDocumentsForRole(documents, currentRole), [documents, currentRole]);
+  const scopedNotifications = useMemo(() => filterNotificationsForRole(notifications, currentRole), [notifications, currentRole]);
+
+  // Synchronize selected docket with scoped applications
+  useEffect(() => {
+    if (scopedApplications.length > 0) {
+      if (!selectedDocket || !scopedApplications.some(a => a.docketNumber === selectedDocket)) {
+        setSelectedDocket(scopedApplications[0].docketNumber);
+      }
+    } else {
+      setSelectedDocket(null);
+    }
+  }, [scopedApplications, selectedDocket]);
 
   // Sync to localStorage as client cache
   useEffect(() => {
@@ -464,82 +498,117 @@ export function App() {
         <Navigation
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          currentRole={currentRole}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
           onOpenWalkthrough={() => setIsWalkthroughOpen(true)}
           counts={{
-            pendingWorkflow: applications.filter(a => a.currentStage !== 'APPROVED_UNCONDITIONAL' && a.currentStage !== 'REJECTED').length,
+            pendingWorkflow: scopedApplications.filter(a => a.currentStage !== 'APPROVED_UNCONDITIONAL' && a.currentStage !== 'REJECTED').length,
             evcQueued: evcRecords.filter(e => e.status === 'PENDING_SCHEDULE').length,
-            overdueUndertakings: undertakings.filter(u => u.status === 'OVERDUE_ESCALATED').length,
-            expiringDocs: documents.filter(d => d.status === 'EXPIRING_SOON' || d.status === 'CRITICALLY_EXPIRED').length,
-            escalatedAlerts: notifications.filter(n => n.status === 'ESCALATED').length,
+            overdueUndertakings: scopedUndertakings.filter(u => u.status === 'OVERDUE_ESCALATED').length,
+            expiringDocs: scopedDocuments.filter(d => d.status === 'EXPIRING_SOON' || d.status === 'CRITICALLY_EXPIRED').length,
+            escalatedAlerts: scopedNotifications.filter(n => n.status === 'ESCALATED').length,
           }}
         />
 
         {/* Main Workspace Body */}
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full overflow-y-auto" role="main">
-        {activeTab === 'overview' && (
-          <OverviewDashboard
-            applications={applications}
-            undertakings={undertakings}
-            documents={documents}
-            onSelectDocket={(docket) => {
-              setSelectedDocket(docket);
-              setActiveTab('workflow');
-            }}
-            onNavigateTab={setActiveTab}
-          />
-        )}
+          {/* Persona Clearance & Scoping Security Strip */}
+          <div className="mb-5 bg-white border border-slate-200 rounded-lg p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className={`px-2.5 py-1 rounded text-xs font-bold border uppercase tracking-wide flex-shrink-0 ${roleConfig.badgeBg} ${roleConfig.badgeText} ${roleConfig.badgeBorder}`}>
+                {roleConfig.clearance}
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-xs text-[#0a2540]">{roleConfig.label}</span>
+                  <span className="text-[11px] text-slate-500 hidden sm:inline">• {roleConfig.department}</span>
+                </div>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  {roleConfig.scopeSummary}
+                </p>
+              </div>
+            </div>
 
-        {activeTab === 'workflow' && (
-          <WorkflowManager
-            applications={applications}
-            selectedDocket={selectedDocket}
-            onSelectDocket={setSelectedDocket}
-            currentRole={currentRole}
-            onAdvanceStage={handleAdvanceStage}
-            onResolveDeficiency={handleResolveDeficiency}
-            onAddDeficiency={handleAddDeficiency}
-          />
-        )}
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              <span className="text-[10px] uppercase font-bold text-slate-400">Jurisdiction:</span>
+              <span className="text-xs font-mono font-semibold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
+                {roleConfig.jurisdictionScope}
+              </span>
+              {roleConfig.isReadOnly && (
+                <span className="text-xs font-bold bg-rose-100 text-rose-800 px-2.5 py-0.5 rounded border border-rose-300 flex items-center gap-1 shadow-xs">
+                  🔒 Read-Only Audit Clearance
+                </span>
+              )}
+            </div>
+          </div>
 
-        {activeTab === 'evc' && (
-          <EVCScheduler
-            evcRecords={evcRecords}
-            onScheduleVisit={handleScheduleVisit}
-            onSubmitOutcome={handleSubmitEVCOutcome}
-          />
-        )}
+          {activeTab === 'overview' && (
+            <OverviewDashboard
+              applications={scopedApplications}
+              undertakings={scopedUndertakings}
+              documents={scopedDocuments}
+              onSelectDocket={(docket) => {
+                setSelectedDocket(docket);
+                setActiveTab('workflow');
+              }}
+              onNavigateTab={setActiveTab}
+            />
+          )}
 
-        {activeTab === 'undertakings' && (
-          <UndertakingsTracker
-            undertakings={undertakings}
-            onUploadEvidence={handleUploadEvidence}
-            onVerifyUndertaking={handleVerifyUndertaking}
-          />
-        )}
+          {activeTab === 'workflow' && (
+            <WorkflowManager
+              applications={scopedApplications}
+              selectedDocket={selectedDocket}
+              onSelectDocket={setSelectedDocket}
+              currentRole={currentRole}
+              onAdvanceStage={handleAdvanceStage}
+              onResolveDeficiency={handleResolveDeficiency}
+              onAddDeficiency={handleAddDeficiency}
+            />
+          )}
 
-        {activeTab === 'documents' && (
-          <DocumentRadar
-            documents={documents}
-            onConfirmOCR={handleConfirmOCR}
-            onSubmitRenewal={handleSubmitRenewal}
-          />
-        )}
+          {activeTab === 'evc' && (
+            <EVCScheduler
+              evcRecords={evcRecords}
+              onScheduleVisit={handleScheduleVisit}
+              onSubmitOutcome={handleSubmitEVCOutcome}
+              currentRole={currentRole}
+            />
+          )}
 
-        {activeTab === 'notifications' && (
-          <NotificationEngine
-            notifications={notifications}
-            onTriggerCronCheck={handleTriggerCronCheck}
-            onAcknowledgeAlert={handleAcknowledgeAlert}
-          />
-        )}
+          {activeTab === 'undertakings' && (
+            <UndertakingsTracker
+              undertakings={scopedUndertakings}
+              onUploadEvidence={handleUploadEvidence}
+              onVerifyUndertaking={handleVerifyUndertaking}
+              currentRole={currentRole}
+            />
+          )}
 
-        {activeTab === 'audit' && (
-          <AuditLedger
-            auditLogs={auditLogs}
-          />
-        )}
+          {activeTab === 'documents' && (
+            <DocumentRadar
+              documents={scopedDocuments}
+              onConfirmOCR={handleConfirmOCR}
+              onSubmitRenewal={handleSubmitRenewal}
+              currentRole={currentRole}
+            />
+          )}
+
+          {activeTab === 'notifications' && (
+            <NotificationEngine
+              notifications={scopedNotifications}
+              onTriggerCronCheck={handleTriggerCronCheck}
+              onAcknowledgeAlert={handleAcknowledgeAlert}
+            />
+          )}
+
+          {activeTab === 'audit' && (
+            <AuditLedger
+              auditLogs={auditLogs}
+              currentRole={currentRole}
+            />
+          )}
         </main>
       </div>
 

@@ -10,16 +10,20 @@ import {
 } from 'lucide-react';
 import { calculateDaysRemaining } from '../services/workflowEngine';
 
+import { Role } from '../types';
+
 interface UndertakingsTrackerProps {
   undertakings: Undertaking[];
   onUploadEvidence: (id: string, fileName: string) => void;
   onVerifyUndertaking: (id: string, verified: boolean, notes: string) => void;
+  currentRole?: Role;
 }
 
 export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
   undertakings,
   onUploadEvidence,
   onVerifyUndertaking,
+  currentRole = 'REGIONAL_OFFICER',
 }) => {
   const [selectedUndertakingId, setSelectedUndertakingId] = useState<string>(undertakings[0]?.id || '');
   const [uploadFileName, setUploadFileName] = useState('');
@@ -210,22 +214,39 @@ export const UndertakingsTracker: React.FC<UndertakingsTrackerProps> = ({
 
               {/* Actions Console */}
               <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2.5">
-                <button
-                  onClick={() => setShowUploadModal(true)}
-                  className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
-                >
-                  <Upload className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Upload / Replace Evidence PDF</span>
-                </button>
+                {currentRole !== 'STATUTORY_AUDITOR' ? (
+                  <>
+                    <button
+                      onClick={() => setShowUploadModal(true)}
+                      className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
+                    >
+                      <Upload className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>{currentRole === 'INSTITUTION_REP' ? 'Upload Compliance Supporting Proof (PDF)' : 'Upload / Replace Evidence PDF'}</span>
+                    </button>
 
-                {selectedUnd.evidenceDocName && selectedUnd.status !== 'VERIFIED_COMPLIANT' && (
-                  <button
-                    onClick={() => setShowVerifyModal(true)}
-                    className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Officer Verification & Sign-off</span>
-                  </button>
+                    {selectedUnd.evidenceDocName && selectedUnd.status !== 'VERIFIED_COMPLIANT' && (
+                      currentRole !== 'INSTITUTION_REP' ? (
+                        <button
+                          onClick={() => setShowVerifyModal(true)}
+                          className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>Officer Verification & Sign-off</span>
+                        </button>
+                      ) : (
+                        <div className="text-xs text-amber-900 bg-amber-50 px-3 py-1.5 rounded border border-amber-200 flex items-center gap-1.5">
+                          <span>Evidence submitted. Awaiting Bureau Officer verification under Rule APH 1.4(g) (Submission ≠ Compliance).</span>
+                        </div>
+                      )
+                    )}
+                  </>
+                ) : (
+                  <div className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-500 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true" />
+                    <span>
+                      Auditor View: Evidence document timestamped for cryptographic audit trail. Mutations disabled under Read-Only Clearance.
+                    </span>
+                  </div>
                 )}
               </div>
             </div>

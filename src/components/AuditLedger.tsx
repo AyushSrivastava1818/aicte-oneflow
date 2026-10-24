@@ -12,11 +12,17 @@ import {
 } from 'lucide-react';
 import { verifyAuditLedgerIntegrity } from '../services/workflowEngine';
 
+import { Role } from '../types';
+
 interface AuditLedgerProps {
   auditLogs: CryptographicAuditRecord[];
+  currentRole?: Role;
 }
 
-export const AuditLedger: React.FC<AuditLedgerProps> = ({ auditLogs }) => {
+export const AuditLedger: React.FC<AuditLedgerProps> = ({ 
+  auditLogs,
+  currentRole = 'STATUTORY_AUDITOR',
+}) => {
   // Live Ledger Verification state
   const [liveVerificationResult, setLiveVerificationResult] = useState<{
     isChainValid: boolean;
@@ -127,6 +133,20 @@ export const AuditLedger: React.FC<AuditLedgerProps> = ({ auditLogs }) => {
           </button>
         </div>
       </div>
+
+      {/* Statutory Auditor Mode Indicator */}
+      {currentRole === 'STATUTORY_AUDITOR' && (
+        <div className="bg-rose-50 border border-rose-300 p-3 rounded-lg text-xs flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-pulse flex-shrink-0"></span>
+            <strong className="text-rose-950 font-bold">CVC / CAG Vigilance Directorate Inspection Mode:</strong>
+            <span className="text-slate-700">Audit session authenticated for independent tamper detection and provenance verification.</span>
+          </div>
+          <span className="text-[10px] font-mono uppercase font-bold text-rose-800 bg-rose-100 px-2 py-0.5 rounded border border-rose-200">
+            NIST FIPS 180-4
+          </span>
+        </div>
+      )}
 
       {/* Live Verification Feedback Banner */}
       {liveVerificationResult && (

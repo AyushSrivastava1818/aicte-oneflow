@@ -8,7 +8,8 @@ import {
   FileCheck2, 
   AlertOctagon, 
   RotateCcw,
-  PlusCircle
+  PlusCircle,
+  ShieldCheck
 } from 'lucide-react';
 import { generateExplainableCaseAction, validateStateTransition } from '../services/workflowEngine';
 
@@ -499,12 +500,22 @@ export const WorkflowManager: React.FC<WorkflowManagerProps> = ({
                           </div>
 
                           {!def.resolved && (
-                            <button
-                              onClick={() => onResolveDeficiency(currentApp.id, def.id)}
-                              className="text-xs px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-medium shadow-xs"
-                            >
-                              Mark Rectified
-                            </button>
+                            (currentRole === 'SCRUTINY_OFFICER' || currentRole === 'REGIONAL_OFFICER' || currentRole === 'CENTRAL_ADMIN') ? (
+                              <button
+                                onClick={() => onResolveDeficiency(currentApp.id, def.id)}
+                                className="text-xs px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-medium shadow-xs"
+                              >
+                                Mark Rectified
+                              </button>
+                            ) : currentRole === 'INSTITUTION_REP' ? (
+                              <span className="text-[11px] font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
+                                Action: Submit Proof for Re-Scrutiny
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
+                                Unresolved (Audit Logged)
+                              </span>
+                            )
                           )}
                         </div>
                       ))}
@@ -546,115 +557,143 @@ export const WorkflowManager: React.FC<WorkflowManagerProps> = ({
                 </div>
 
                 <div className="flex flex-wrap gap-2.5">
-                  {currentApp.currentStage === 'APPLICATION_SUBMITTED' && (
-                    <button
-                      onClick={() => handleStageTransition('UNDER_SCRUTINY', 'Desk officer accepted application for scrutiny')}
-                      className="px-3.5 py-2 bg-[#0f3c6e] hover:bg-[#0a2540] text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
-                    >
-                      <span>Begin Scrutiny Verification</span>
-                      <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-                    </button>
-                  )}
-
-                  {currentApp.currentStage === 'UNDER_SCRUTINY' && (
-                    <>
+                  {currentRole === 'STATUTORY_AUDITOR' ? (
+                    <div className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-500 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-rose-600 flex-shrink-0" aria-hidden="true" />
+                      <span>
+                        Role <strong>STATUTORY_AUDITOR</strong> operates under CVC/CAG Read-Only Audit Clearance. Workflow mutations and state transitions are disabled.
+                      </span>
+                    </div>
+                  ) : currentRole === 'INSTITUTION_REP' ? (
+                    currentApp.currentStage === 'SCRUTINY_DEFICIENCY_RAISED' ? (
                       <button
-                        onClick={() => handleStageTransition('SCRUTINY_CLEARED', 'Scrutiny certified cleared with zero deficiencies')}
-                        className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
+                        onClick={() => handleStageTransition('RE_SCRUTINY', 'Institution submitted compliance documents for re-scrutiny')}
+                        className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-                        <span>Certify Scrutiny Cleared (Form 15)</span>
+                        <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Submit Rectifications for Re-Scrutiny</span>
                       </button>
-
-                      <button
-                        onClick={() => handleStageTransition('SCRUTINY_DEFICIENCY_RAISED', 'Issued Form 17 Deficiency Note to Institution')}
-                        className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500"
-                      >
-                        <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
-                        <span>Issue Form 17 Deficiency Note</span>
-                      </button>
-                    </>
-                  )}
-
-                  {currentApp.currentStage === 'SCRUTINY_DEFICIENCY_RAISED' && (
-                    <button
-                      onClick={() => handleStageTransition('RE_SCRUTINY', 'Institution submitted compliance documents for re-scrutiny')}
-                      className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>Submit Rectifications for Re-Scrutiny</span>
-                    </button>
-                  )}
-
-                  {currentApp.currentStage === 'RE_SCRUTINY' && (
-                    <button
-                      onClick={() => handleStageTransition('SCRUTINY_CLEARED', 'Re-Scrutiny verified rectifications and cleared docket')}
-                      className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>Accept Rectifications & Clear Scrutiny</span>
-                    </button>
-                  )}
-
-                  {currentApp.currentStage === 'SCRUTINY_CLEARED' && (
+                    ) : (
+                      <div className="w-full p-2.5 bg-blue-50 border border-blue-200 rounded text-xs text-blue-900 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-blue-600 flex-shrink-0" aria-hidden="true" />
+                        <span>
+                          Applicant View: Docket is undergoing official regulatory processing. Administrative stage execution is handled by Bureau Scrutiny and Regional Officers.
+                        </span>
+                      </div>
+                    )
+                  ) : (
                     <>
-                      {currentApp.route === 'ROUTE_EOA' ? (
+                      {currentApp.currentStage === 'APPLICATION_SUBMITTED' && (
                         <button
-                          onClick={() => handleStageTransition('APPROVED_WITH_UNDERTAKINGS', 'EoA granted with statutory post-approval undertakings')}
-                          className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
-                        >
-                          <FileCheck2 className="w-3.5 h-3.5" aria-hidden="true" />
-                          <span>Sanction Extension of Approval (EoA)</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleStageTransition('EVC_QUEUED', 'Queued for Expert Visit Committee panel scheduling')}
+                          onClick={() => handleStageTransition('UNDER_SCRUTINY', 'Desk officer accepted application for scrutiny')}
                           className="px-3.5 py-2 bg-[#0f3c6e] hover:bg-[#0a2540] text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
                         >
-                          <span>Queue for EVC Committee Dispatch</span>
+                          <span>Begin Scrutiny Verification</span>
                           <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
                         </button>
                       )}
+
+                      {currentApp.currentStage === 'UNDER_SCRUTINY' && (
+                        <>
+                          <button
+                            onClick={() => handleStageTransition('SCRUTINY_CLEARED', 'Scrutiny certified cleared with zero deficiencies')}
+                            className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                            <span>Certify Scrutiny Cleared (Form 15)</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleStageTransition('SCRUTINY_DEFICIENCY_RAISED', 'Issued Form 17 Deficiency Note to Institution')}
+                            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-amber-500"
+                          >
+                            <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
+                            <span>Issue Form 17 Deficiency Note</span>
+                          </button>
+                        </>
+                      )}
+
+                      {currentApp.currentStage === 'SCRUTINY_DEFICIENCY_RAISED' && (
+                        <button
+                          onClick={() => handleStageTransition('RE_SCRUTINY', 'Institution submitted compliance documents for re-scrutiny')}
+                          className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>Submit Rectifications for Re-Scrutiny</span>
+                        </button>
+                      )}
+
+                      {currentApp.currentStage === 'RE_SCRUTINY' && (
+                        <button
+                          onClick={() => handleStageTransition('SCRUTINY_CLEARED', 'Re-Scrutiny verified rectifications and cleared docket')}
+                          className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>Accept Rectifications & Clear Scrutiny</span>
+                        </button>
+                      )}
+
+                      {currentApp.currentStage === 'SCRUTINY_CLEARED' && (
+                        <>
+                          {currentApp.route === 'ROUTE_EOA' ? (
+                            <button
+                              onClick={() => handleStageTransition('APPROVED_WITH_UNDERTAKINGS', 'EoA granted with statutory post-approval undertakings')}
+                              className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
+                            >
+                              <FileCheck2 className="w-3.5 h-3.5" aria-hidden="true" />
+                              <span>Sanction Extension of Approval (EoA)</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleStageTransition('EVC_QUEUED', 'Queued for Expert Visit Committee panel scheduling')}
+                              className="px-3.5 py-2 bg-[#0f3c6e] hover:bg-[#0a2540] text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
+                            >
+                              <span>Queue for EVC Committee Dispatch</span>
+                              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                            </button>
+                          )}
+                        </>
+                      )}
+
+                      {currentApp.currentStage === 'EVC_QUEUED' && (
+                        <button
+                          onClick={() => handleStageTransition('EVC_SCHEDULED', 'EVC Panel constituted and inspection date confirmed')}
+                          className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
+                        >
+                          <span>Confirm Committee & Schedule Date</span>
+                        </button>
+                      )}
+
+                      {currentApp.currentStage === 'EVC_SCHEDULED' && (
+                        <button
+                          onClick={() => handleStageTransition('EVC_COMPLETED', 'EVC Inspection report and geotagged matrix uploaded')}
+                          className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>Upload & Verify EVC Outcome Report</span>
+                        </button>
+                      )}
+
+                      {currentApp.currentStage === 'EVC_COMPLETED' && (
+                        <button
+                          onClick={() => handleStageTransition('APPROVED_WITH_UNDERTAKINGS', 'Council approved with conditional undertakings')}
+                          className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>Sanction Approval Order (with Undertakings)</span>
+                        </button>
+                      )}
+
+                      {currentApp.currentStage === 'APPROVED_WITH_UNDERTAKINGS' && (
+                        <button
+                          onClick={() => handleStageTransition('APPROVED_UNCONDITIONAL', 'All statutory undertakings fulfilled and certified')}
+                          className="px-3.5 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>Seal Docket as Final Unconditional Sanction</span>
+                        </button>
+                      )}
                     </>
-                  )}
-
-                  {currentApp.currentStage === 'EVC_QUEUED' && (
-                    <button
-                      onClick={() => handleStageTransition('EVC_SCHEDULED', 'EVC Panel constituted and inspection date confirmed')}
-                      className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
-                    >
-                      <span>Confirm Committee & Schedule Date</span>
-                    </button>
-                  )}
-
-                  {currentApp.currentStage === 'EVC_SCHEDULED' && (
-                    <button
-                      onClick={() => handleStageTransition('EVC_COMPLETED', 'EVC Inspection report and geotagged matrix uploaded')}
-                      className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>Upload & Verify EVC Outcome Report</span>
-                    </button>
-                  )}
-
-                  {currentApp.currentStage === 'EVC_COMPLETED' && (
-                    <button
-                      onClick={() => handleStageTransition('APPROVED_WITH_UNDERTAKINGS', 'Council approved with conditional undertakings')}
-                      className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>Sanction Approval Order (with Undertakings)</span>
-                    </button>
-                  )}
-
-                  {currentApp.currentStage === 'APPROVED_WITH_UNDERTAKINGS' && (
-                    <button
-                      onClick={() => handleStageTransition('APPROVED_UNCONDITIONAL', 'All statutory undertakings fulfilled and certified')}
-                      className="px-3.5 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>Seal Docket as Final Unconditional Sanction</span>
-                    </button>
                   )}
                 </div>
 

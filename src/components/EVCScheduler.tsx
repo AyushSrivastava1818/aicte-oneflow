@@ -9,16 +9,20 @@ import {
   AlertTriangle 
 } from 'lucide-react';
 
+import { Role } from '../types';
+
 interface EVCSchedulerProps {
   evcRecords: EVCRecord[];
   onScheduleVisit: (evcId: string, visitDate: string) => void;
   onSubmitOutcome: (evcId: string, recommendation: 'RECOMMENDED_FULL' | 'RECOMMENDED_WITH_CONDITIONS' | 'REJECTED_DEFICIENT', remarks: string) => void;
+  currentRole?: Role;
 }
 
 export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
   evcRecords,
   onScheduleVisit,
   onSubmitOutcome,
+  currentRole = 'REGIONAL_OFFICER',
 }) => {
   const [selectedRecordId, setSelectedRecordId] = useState<string>(evcRecords[0]?.id || '');
   const [scheduleDate, setScheduleDate] = useState('2026-10-28T10:00');
@@ -233,30 +237,41 @@ export const EVCScheduler: React.FC<EVCSchedulerProps> = ({
 
               {/* Actions Console */}
               <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2.5">
-                {selectedRecord.status === 'PENDING_SCHEDULE' && (
-                  <button
-                    onClick={() => setShowScheduleModal(true)}
-                    className="px-3.5 py-2 bg-[#0f3c6e] hover:bg-[#0a2540] text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
-                  >
-                    <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Schedule EVC Inspection Visit</span>
-                  </button>
-                )}
+                {(currentRole === 'EVC_COORDINATOR' || currentRole === 'REGIONAL_OFFICER' || currentRole === 'CENTRAL_ADMIN') ? (
+                  <>
+                    {selectedRecord.status === 'PENDING_SCHEDULE' && (
+                      <button
+                        onClick={() => setShowScheduleModal(true)}
+                        className="px-3.5 py-2 bg-[#0f3c6e] hover:bg-[#0a2540] text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
+                      >
+                        <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Schedule EVC Inspection Visit</span>
+                      </button>
+                    )}
 
-                {selectedRecord.status === 'SCHEDULED' && (
-                  <button
-                    onClick={() => setShowOutcomeModal(true)}
-                    className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Upload EVC Inspection Findings & Recommendation</span>
-                  </button>
-                )}
+                    {selectedRecord.status === 'SCHEDULED' && (
+                      <button
+                        onClick={() => setShowOutcomeModal(true)}
+                        className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-600"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Upload EVC Inspection Findings & Recommendation</span>
+                      </button>
+                    )}
 
-                {selectedRecord.status === 'REPORT_SUBMITTED' && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-950 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-700" aria-hidden="true" />
-                    <span>Inspection report certified by committee members and transmitted to Executive Council.</span>
+                    {selectedRecord.status === 'REPORT_SUBMITTED' && (
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-950 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-700" aria-hidden="true" />
+                        <span>Inspection report certified by committee members and transmitted to Executive Council.</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-500 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true" />
+                    <span>
+                      Role <strong>{currentRole}</strong> has read-only observation status. Panel constitution & scheduling reserved for EVC Coordinator / Regional Officer (Rule APH 2.5).
+                    </span>
                   </div>
                 )}
               </div>

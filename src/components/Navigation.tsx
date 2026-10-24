@@ -9,8 +9,11 @@ import {
   FileLock2,
   ChevronLeft,
   ChevronRight,
-  HelpCircle
+  HelpCircle,
+  ShieldAlert
 } from 'lucide-react';
+import { Role } from '../types';
+import { ROLE_CONFIGS, isTabAllowed } from '../services/rolePermissions';
 
 export type TabType = 
   | 'overview' 
@@ -31,6 +34,7 @@ interface NavigationProps {
     expiringDocs: number;
     escalatedAlerts: number;
   };
+  currentRole?: Role;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onOpenWalkthrough?: () => void;
@@ -40,6 +44,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   activeTab, 
   onTabChange, 
   counts,
+  currentRole = 'REGIONAL_OFFICER',
   isCollapsed: controlledCollapsed,
   onToggleCollapse,
   onOpenWalkthrough
@@ -47,6 +52,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const isCollapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
   const toggleCollapse = onToggleCollapse || (() => setInternalCollapsed(prev => !prev));
+  const roleConfig = ROLE_CONFIGS[currentRole];
 
   const tabs = [
     {
@@ -147,65 +153,101 @@ export const Navigation: React.FC<NavigationProps> = ({
         </button>
       </div>
 
+      {/* Active Persona Scope Strip */}
+      {!isCollapsed && (
+        <div className="px-3.5 py-2.5 bg-slate-950/70 border-b border-slate-800/80 text-left">
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] uppercase font-extrabold tracking-wider text-amber-400">
+              Clearance Scope
+            </span>
+            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
+              {currentRole}
+            </span>
+          </div>
+          <div className="text-xs font-semibold text-white truncate mt-0.5">
+            {roleConfig.label}
+          </div>
+          <div className="text-[10px] text-slate-400 truncate mt-0.5">
+            {roleConfig.jurisdictionScope}
+          </div>
+        </div>
+      )}
+
       {/* Navigation Items List */}
       <nav className="flex-1 py-3 px-2 space-y-1.5 overflow-y-auto overflow-x-hidden">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
+        {tabs
+          .filter((tab) => isTabAllowed(currentRole, tab.id))
+          .map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            const displayLabel = roleConfig.tabLabelOverrides?.[tab.id] || tab.label;
 
-          return (
-            <div key={tab.id} className="relative group">
-              <button
-                onClick={() => onTabChange(tab.id)}
-                className={`w-full flex items-center transition-all rounded-lg text-xs font-medium ${
-                  isCollapsed ? 'justify-center p-3' : 'justify-between px-3 py-2.5'
-                } ${
-                  isActive
-                    ? 'bg-[#0f3c6e] text-white shadow-sm border-l-4 border-amber-400'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60 border-l-4 border-transparent'
-                }`}
-                aria-current={isActive ? 'page' : undefined}
-                aria-label={tab.label}
-              >
-                <div className={`flex items-center min-w-0 ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
-                  <div className="relative flex items-center justify-center">
-                    <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${
-                      isActive ? 'text-amber-400' : 'text-slate-400 group-hover:text-slate-200'
-                    }`} />
-                    {/* Collapsed notification indicator badge */}
-                    {isCollapsed && tab.badge !== null && (
-                      <span className="absolute -top-1.5 -right-2 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-[#0a2540]" />
+            return (
+              <div key={tab.id} className="relative group">
+                <button
+                  onClick={() => onTabChange(tab.id)}
+                  className={`w-full flex items-center transition-all rounded-lg text-xs font-medium ${
+                    isCollapsed ? 'justify-center p-3' : 'justify-between px-3 py-2.5'
+                  } ${
+                    isActive
+                      ? 'bg-[#0f3c6e] text-white shadow-sm border-l-4 border-amber-400'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60 border-l-4 border-transparent'
+                  }`}
+                  aria-current={isActive ? 'page' : undefined}
+                  aria-label={displayLabel}
+                >
+                  <div className={`flex items-center min-w-0 ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
+                    <div className="relative flex items-center justify-center">
+                      <Icon className={`w-4 h-4 flex-shrink-0 transition-colors ${
+                        isActive ? 'text-amber-400' : 'text-slate-400 group-hover:text-slate-200'
+                      }`} />
+                      {/* Collapsed notification indicator badge */}
+                      {isCollapsed && tab.badge !== null && (
+                        <span className="absolute -top-1.5 -right-2 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-[#0a2540]" />
+                      )}
+                    </div>
+
+                    {!isCollapsed && (
+                      <span className="truncate text-left">{displayLabel}</span>
                     )}
                   </div>
 
-                  {!isCollapsed && (
-                    <span className="truncate text-left">{tab.label}</span>
+                  {!isCollapsed && tab.badge !== null && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-2 flex-shrink-0 ${tab.badgeColor}`}>
+                      {tab.badge}
+                    </span>
                   )}
-                </div>
+                </button>
 
-                {!isCollapsed && tab.badge !== null && (
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-2 flex-shrink-0 ${tab.badgeColor}`}>
-                    {tab.badge}
-                  </span>
-                )}
-              </button>
-
-              {/* Floating Tooltip when Collapsed */}
-              {isCollapsed && (
-                <div className="fixed left-16 sm:left-20 ml-2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 transform -translate-y-9">
-                  <div className="bg-slate-900 text-white text-xs px-3 py-1.5 rounded-md shadow-xl border border-slate-700 whitespace-nowrap flex items-center gap-2">
-                    <span className="font-medium">{tab.label}</span>
-                    {tab.badge !== null && (
-                      <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${tab.badgeColor}`}>
-                        {tab.badge}
-                      </span>
-                    )}
+                {/* Floating Tooltip when Collapsed */}
+                {isCollapsed && (
+                  <div className="fixed left-16 sm:left-20 ml-2 z-50 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 transform -translate-y-9">
+                    <div className="bg-slate-900 text-white text-xs px-3 py-1.5 rounded-md shadow-xl border border-slate-700 whitespace-nowrap flex items-center gap-2">
+                      <span className="font-medium">{displayLabel}</span>
+                      {tab.badge !== null && (
+                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${tab.badgeColor}`}>
+                          {tab.badge}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+            );
+          })}
+
+        {/* Restricted Security Notice when expanded */}
+        {!isCollapsed && roleConfig.allowedTabs.length < tabs.length && (
+          <div className="mx-1 my-3 p-2.5 rounded-md bg-slate-950/80 border border-slate-800/90 text-[10px] text-slate-400">
+            <div className="flex items-center gap-1.5 font-bold text-amber-400 uppercase tracking-wider mb-1">
+              <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>Restricted Modules</span>
             </div>
-          );
-        })}
+            <p className="leading-tight text-slate-400">
+              {tabs.length - roleConfig.allowedTabs.length} internal AICTE module(s) isolated from external/examiner view per Cyber Security Policy.
+            </p>
+          </div>
+        )}
       </nav>
 
       {/* Bottom Footer Section */}

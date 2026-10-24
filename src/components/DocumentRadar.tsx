@@ -7,16 +7,20 @@ import {
   ShieldCheck 
 } from 'lucide-react';
 
+import { Role } from '../types';
+
 interface DocumentRadarProps {
   documents: PrescribedDocument[];
   onConfirmOCR: (docId: string) => void;
   onSubmitRenewal: (docId: string, newExpiry: string, newNumber: string) => void;
+  currentRole?: Role;
 }
 
 export const DocumentRadar: React.FC<DocumentRadarProps> = ({
   documents,
   onConfirmOCR,
   onSubmitRenewal,
+  currentRole = 'REGIONAL_OFFICER',
 }) => {
   const [selectedDocId, setSelectedDocId] = useState<string>(documents[0]?.id || '');
   const [filterPeriod, setFilterPeriod] = useState<'ALL' | '7D' | '30D' | '60D' | '90D'>('ALL');
@@ -213,25 +217,40 @@ export const DocumentRadar: React.FC<DocumentRadarProps> = ({
                       ✓ Confirmed by {selectedDoc.ocrExtraction.confirmedBy || 'Authorized Officer'}
                     </span>
                   ) : (
-                    <button
-                      onClick={() => onConfirmOCR(selectedDoc.id)}
-                      className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-semibold text-[11px] focus-visible:ring-2 focus-visible:ring-amber-400"
-                    >
-                      Confirm Extracted Metadata
-                    </button>
+                    (currentRole === 'SCRUTINY_OFFICER' || currentRole === 'REGIONAL_OFFICER' || currentRole === 'CENTRAL_ADMIN') ? (
+                      <button
+                        onClick={() => onConfirmOCR(selectedDoc.id)}
+                        className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-semibold text-[11px] focus-visible:ring-2 focus-visible:ring-amber-400"
+                      >
+                        Confirm Extracted Metadata
+                      </button>
+                    ) : (
+                      <span className="text-amber-400 text-[10px] font-semibold">
+                        Awaiting Bureau Scrutiny Officer Verification
+                      </span>
+                    )
                   )}
                 </div>
               </div>
 
               {/* Action Controls */}
               <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2.5">
-                <button
-                  onClick={() => setShowRenewalModal(true)}
-                  className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
-                >
-                  <Upload className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Submit Registered Renewal Document</span>
-                </button>
+                {currentRole !== 'STATUTORY_AUDITOR' ? (
+                  <button
+                    onClick={() => setShowRenewalModal(true)}
+                    className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold rounded shadow-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-blue-600"
+                  >
+                    <Upload className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Submit Registered Renewal Document</span>
+                  </button>
+                ) : (
+                  <div className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-500 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true" />
+                    <span>
+                      Auditor View: Document validity monitoring and OCR confidence metrics. Renewal execution disabled in Read-Only Mode.
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
