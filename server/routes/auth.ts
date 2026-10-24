@@ -77,7 +77,7 @@ authRouter.post('/logout', requireAuth, (req: AuthenticatedRequest, res: Respons
 
 // GET /api/auth/users (for demo role switching)
 authRouter.get('/users', async (_req, res: Response) => {
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV === 'production' && !process.env.VERCEL && process.env.ALLOW_SIMULATED_ROLES !== 'true') {
     res.status(403).json({ error: 'Demo user listing and role switching is disabled in production.' });
     return;
   }

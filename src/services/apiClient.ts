@@ -16,12 +16,22 @@ function getHeaders(role?: Role): Record<string, string> {
   return headers;
 }
 
+async function safeJson(res: Response): Promise<any> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: text || `HTTP ${res.status}: ${res.statusText}` };
+  }
+}
+
 export const apiClient = {
   // Health
   async checkHealth(): Promise<{ status: string; database: string; applicationsCount: number }> {
     const res = await fetch(`${API_BASE}/health`);
-    if (!res.ok) throw new Error('Health check failed');
-    return res.json();
+    const data = await safeJson(res);
+    if (!res.ok) throw new Error(data.error || 'Health check failed');
+    return data;
   },
 
   // Auth
@@ -71,7 +81,7 @@ export const apiClient = {
       headers: getHeaders(role),
       body: JSON.stringify({ targetStage, observations, ruleVersion }),
     });
-    const data = await res.json();
+    const data = await safeJson(res);
     if (!res.ok) {
       throw new Error(data.error || data.missingPrerequisites?.join('; ') || 'Transition failed');
     }
@@ -90,11 +100,11 @@ export const apiClient = {
       headers: getHeaders(role),
       body: JSON.stringify({ clause, description, severity }),
     });
+    const data = await safeJson(res);
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to add deficiency');
+      throw new Error(data.error || 'Failed to add deficiency');
     }
-    return res.json();
+    return data;
   },
 
   async resolveDeficiency(
@@ -108,11 +118,11 @@ export const apiClient = {
       headers: getHeaders(role),
       body: JSON.stringify({ resolutionNote }),
     });
+    const data = await safeJson(res);
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to resolve deficiency');
+      throw new Error(data.error || 'Failed to resolve deficiency');
     }
-    return res.json();
+    return data;
   },
 
   // EVC Records

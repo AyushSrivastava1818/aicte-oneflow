@@ -1198,6 +1198,17 @@ applicationsRouter.put('/:id/deficiencies/:defId/resolve', requireAuth, async (r
 
       const note = `Deficiency resolved (${def.clause}): ${resolutionNote || 'Remediated'}. Remaining open: ${remaining.length}`;
 
+      // If deficiency relates to specific statutory documents or norms, update corresponding application attributes
+      if (def.clause.includes('4.12') || def.description.toLowerCase().includes('fire')) {
+        await execute('UPDATE applications SET fire_noc_valid = 1 WHERE id = ?;', [app.id]);
+      }
+      if (def.clause.includes('7.4') || def.description.toLowerCase().includes('cadre')) {
+        await execute("UPDATE applications SET cadre_ratio = '1:15 (Compliant)' WHERE id = ?;", [app.id]);
+      }
+      if (def.clause.includes('trust') || def.description.toLowerCase().includes('trust')) {
+        await execute('UPDATE applications SET trust_deed_valid = 1 WHERE id = ?;', [app.id]);
+      }
+
       await execute(
         'UPDATE applications SET last_action = ?, last_action_timestamp = ? WHERE id = ?;',
         [note, new Date().toISOString(), app.id]
