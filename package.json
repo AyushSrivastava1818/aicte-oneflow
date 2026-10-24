@@ -8,7 +8,7 @@
     "dev:client": "vite",
     "server": "tsx server/index.ts",
     "seed": "tsx -e \"import { seedDatabase } from './server/db/seed'; seedDatabase().then(() => console.log('Database seeded successfully.'));\"",
-    "build": "tsc -b && vite build && esbuild api/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=api/index.js",
+    "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
     "test:watch": "vitest",
