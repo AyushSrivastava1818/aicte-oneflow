@@ -86,7 +86,7 @@ export const AuditLedger: React.FC<AuditLedgerProps> = ({ auditLogs }) => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(auditLogs, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `aicte_oneflow_hash_chained_audit_ledger_${Date.now()}.json`);
+    downloadAnchor.setAttribute("download", `aicte_sanrakshak_hash_chained_audit_ledger_${Date.now()}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();

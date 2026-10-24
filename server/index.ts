@@ -20,7 +20,7 @@ async function startServer() {
 
     app.listen(PORT, () => {
       console.log(`====================================================`);
-      console.log(` AICTE OneFlow Relational Backend Server Active     `);
+      console.log(` AICTE SANRAKSHAK Relational Backend Server Active `);
       console.log(` Listening on: http://localhost:${PORT}             `);
       console.log(` Health Check: http://localhost:${PORT}/api/health  `);
       console.log(` Database:     ${DB_FILE}                           `);

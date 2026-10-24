@@ -1,13 +1,15 @@
 <div align="center">
 
-# AICTE OneFlow 🏛️
-### Statutory Approval Orchestration, Institutional Compliance & Administrative Accountability Platform
+<img src="./public/sanrakshak-logo.png" alt="AICTE SANRAKSHAK Emblem" width="120" style="border-radius: 12px; margin-bottom: 12px;" />
+
+# AICTE SANRAKSHAK (संरक्षक) 🏛️
+### Statutory Approval Orchestration, Institutional Compliance & Administrative Vigilance Guardian
 
 **Smart India Hackathon 2026 | Problem Statement: SIH26262 | Theme: Smart Automation**  
 *Regulatory Baseline: AICTE Approval Process Handbook (Published Baseline 2024–2027 / Extrapolated for 2026–2027 Cycle)*
 
 [![SIH 2026](https://img.shields.io/badge/SIH-2026_Problem_SIH26262-orange.svg?style=for-the-badge&logo=gov.in)](https://sih.gov.in)
-[![Tests Passing](https://img.shields.io/badge/Tests-41%2F41%20Passing%20(100%25)-emerald.svg?style=for-the-badge&logo=vitest)](file:///c:/Users/Ayush%20Srivastava/Downloads/SIH%20SUBMISSION%202/server/__tests__/api.test.ts)
+[![Tests Passing](https://img.shields.io/badge/Tests-46%2F46%20Passing%20(100%25)-emerald.svg?style=for-the-badge&logo=vitest)](file:///c:/Users/Ayush%20Srivastava/Downloads/SIH%20SUBMISSION%202/server/__tests__/api.test.ts)
 [![Database](https://img.shields.io/badge/Database-SQLite%20ACID%20Relational-003B57.svg?style=for-the-badge&logo=sqlite)](file:///c:/Users/Ayush%20Srivastava/Downloads/SIH%20SUBMISSION%202/server/db/schema.sql)
 [![Audit](https://img.shields.io/badge/Audit%20Ledger-SHA--256%20Hash%20Chained-navy.svg?style=for-the-badge)](file:///c:/Users/Ayush%20Srivastava/Downloads/SIH%20SUBMISSION%202/server/services/auditService.ts)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Strict%20Type%20Safety-blue.svg?style=for-the-badge&logo=typescript)](file:///c:/Users/Ayush%20Srivastava/Downloads/SIH%20SUBMISSION%202/tsconfig.json)

@@ -24,7 +24,7 @@ const SCENES = [
     tab: 'workflow' as TabType,
     docket: 'AICTE/2026-27/RO-N/10942',
     role: 'SCRUTINY_OFFICER' as Role,
-    summary: 'Institution submits an application. AICTE OneFlow assigns reference number, binds rule version (APH 2024–27 baseline), and deterministically computes the Explainable Case Action with SLA countdown and statutory rationale.',
+    summary: 'Institution submits an application. AICTE SANRAKSHAK assigns reference number, binds rule version (APH 2024–27 baseline), and deterministically computes the Explainable Case Action with SLA countdown and statutory rationale.',
     demonstrationTip: 'Explain to the jury that the application route (New Institution vs. EoA) is governed by rule configurations and explicitly displayed with provenance status.',
     actionLabel: 'Inspect Docket in Workflow Engine',
   },
@@ -44,7 +44,7 @@ const SCENES = [
     tab: 'evc' as TabType,
     docket: 'AICTE/2026-27/RO-SW/11029',
     role: 'EVC_COORDINATOR' as Role,
-    summary: 'Scrutiny-cleared cases enter the EVC queue. OneFlow automatically verifies pre-inspection readiness and returns qualified conflict status (evaluating parent states and declared trust affiliations) before confirming schedule.',
+    summary: 'Scrutiny-cleared cases enter the EVC queue. SANRAKSHAK automatically verifies pre-inspection readiness and returns qualified conflict status (evaluating parent states and declared trust affiliations) before confirming schedule.',
     demonstrationTip: 'Highlight the qualified conflict status (NO_KNOWN_CONFLICT_DETECTED with explicit review scope) and the 4-point readiness checklist.',
     actionLabel: 'Open EVC Scheduling Console',
   },
@@ -54,7 +54,7 @@ const SCENES = [
     tab: 'undertakings' as TabType,
     docket: 'AICTE/2026-27/RO-W/08831',
     role: 'REGIONAL_OFFICER' as Role,
-    summary: 'Extension of Approval was granted subject to a registered lease renewal within 30 days. Institution uploaded evidence. OneFlow enforces that "Submission ≠ Compliance" until officer verification.',
+    summary: 'Extension of Approval was granted subject to a registered lease renewal within 30 days. Institution uploaded evidence. SANRAKSHAK enforces that "Submission ≠ Compliance" until officer verification.',
     demonstrationTip: 'Show how the Regional Officer examines the uploaded lease PDF and verifies or returns it for correction with timestamped notes.',
     actionLabel: 'Inspect Compliance Undertakings',
   },
@@ -129,7 +129,7 @@ export const WalkthroughModal: React.FC<WalkthroughModalProps> = ({
                 Interactive SIH 2026 Judging Walkthrough
               </h3>
               <p className="text-[11px] text-slate-300">
-                AICTE Approval Workflow Automation & Institutional Compliance (SIH26262)
+                AICTE SANRAKSHAK (संरक्षक) • Approval Workflow Automation & Institutional Compliance (SIH26262)
               </p>
             </div>
           </div>

@@ -120,8 +120,13 @@ export const Navigation: React.FC<NavigationProps> = ({
       }`}>
         {!isCollapsed && (
           <div className="flex items-center gap-2 overflow-hidden">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Regulatory Modules
+            <img 
+              src="/sanrakshak-logo.png" 
+              alt="SANRAKSHAK" 
+              className="w-5 h-5 rounded object-cover border border-amber-400/40 flex-shrink-0" 
+            />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300 truncate">
+              SANRAKSHAK Modules
             </span>
           </div>
         )}
@@ -222,8 +227,10 @@ export const Navigation: React.FC<NavigationProps> = ({
         )}
 
         {!isCollapsed && (
-          <div className="px-3 pt-2 text-[10px] text-slate-500 font-mono text-center border-t border-slate-800/40 mt-1">
-            APH 2024–27 Compliance
+          <div className="px-3 pt-2 text-[10px] text-slate-400 font-mono text-center border-t border-slate-800/40 mt-1 flex items-center justify-center gap-1">
+            <span className="text-amber-400 font-semibold">AICTE SANRAKSHAK</span>
+            <span className="text-slate-500">•</span>
+            <span>APH 2024–27</span>
           </div>
         )}
       </div>

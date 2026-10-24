@@ -555,13 +555,21 @@ export function App() {
       {/* Official Gov Footer */}
       <footer className="mt-auto bg-slate-900 text-slate-400 text-xs border-t border-slate-800 py-4 px-4 sm:px-6" role="contentinfo">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="font-semibold text-slate-200">
-              AICTE OneFlow: Smart Approval Orchestration & Institutional Compliance Monitoring System
-            </p>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Developed for Smart India Hackathon 2026 (Problem Statement SIH26262: Software / Smart Automation / AICTE).
-            </p>
+          <div className="flex items-center gap-3">
+            <img 
+              src="/sanrakshak-logo.png" 
+              alt="AICTE SANRAKSHAK Emblem" 
+              className="w-8 h-8 rounded object-cover border border-amber-500/30 flex-shrink-0 hidden sm:block" 
+            />
+            <div>
+              <p className="font-semibold text-slate-200 flex items-center gap-2">
+                <span>AICTE SANRAKSHAK (संरक्षक)</span>
+                <span className="text-amber-400 font-normal text-[11px] hidden md:inline">• Smart Approval Orchestration & Institutional Compliance Guardian</span>
+              </p>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Developed for Smart India Hackathon 2026 (Problem Statement SIH26262: Software / Smart Automation / AICTE).
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-4 text-[11px]">

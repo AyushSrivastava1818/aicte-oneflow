@@ -97,24 +97,27 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Main AICTE Emblem & Portal Header */}
       <div className="px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          {/* AICTE Official Crest Icon */}
-          <div className="w-12 h-12 rounded-lg bg-[#0a2540] text-amber-400 flex items-center justify-center shadow-md border border-slate-700 flex-shrink-0" aria-hidden="true">
-            <svg className="w-8 h-8 fill-current" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 2L1 7l11 5 9-4.09V17h2V7L12 2zm0 8.9L4.24 7.5 12 4.1l7.76 3.4L12 10.9zm-7 3.65v4.54c0 2.21 3.58 4 8 4s8-1.79 8-4v-4.54l-8 3.64-8-3.64z"/>
-            </svg>
+          {/* Official SANRAKSHAK Emblem */}
+          <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-[#0a2540] shadow-md border border-amber-500/40 flex-shrink-0 flex items-center justify-center">
+            <img 
+              src="/sanrakshak-logo.png" 
+              alt="AICTE SANRAKSHAK Official Emblem" 
+              className="w-full h-full object-cover"
+            />
           </div>
 
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[#0a2540] flex items-center gap-2">
-                AICTE OneFlow
-                <span className="bg-[#0f3c6e] text-white text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded">
-                  Explainable Action Engine
+                <span>SANRAKSHAK</span>
+                <span className="text-amber-700 font-semibold text-sm">(संरक्षक)</span>
+                <span className="bg-[#0f3c6e] text-white text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded shadow-xs">
+                  Statutory Vigilance Engine
                 </span>
               </h1>
             </div>
             <p className="text-xs text-slate-600 font-medium">
-              अखिल भारतीय तकनीकी शिक्षा परिषद • Statutory Approval Workflow Automation & Institutional Compliance Platform
+              अखिल भारतीय तकनीकी शिक्षा परिषद • AICTE Approval Workflow Automation & Institutional Compliance Guardian
             </p>
           </div>
         </div>
