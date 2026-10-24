@@ -2,6 +2,7 @@ import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import fs from 'fs';
 import path from 'path';
 import { SCHEMA_SQL } from './schema';
+import { SQL_WASM_BASE64 } from './wasmBinary';
 
 let db: SqlJsDatabase | null = null;
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -37,36 +38,12 @@ class AsyncLock {
 const writerLock = new AsyncLock();
 
 async function initializeSqlEngine(): Promise<any> {
-  const candidatePaths = [
-    path.resolve(process.cwd(), 'api', 'sql-wasm.wasm'),
-    path.resolve(process.cwd(), 'server', 'db', 'sql-wasm.wasm'),
-  ];
-
   try {
-    const { createRequire } = await import('module');
-    const req = createRequire(import.meta.url);
-    const nmPath = req.resolve('sql.js/dist/sql-wasm.wasm');
-    candidatePaths.push(nmPath);
-  } catch {}
-
-  for (const p of candidatePaths) {
-    if (fs.existsSync(p)) {
-      try {
-        const wasmBinary = fs.readFileSync(p);
-        return await initSqlJs({ wasmBinary });
-      } catch (e) {
-        console.warn(`[database] Failed loading wasm from ${p}:`, e);
-      }
-    }
-  }
-
-  try {
-    return await initSqlJs();
+    const wasmBinary = Buffer.from(SQL_WASM_BASE64, 'base64');
+    return await initSqlJs({ wasmBinary });
   } catch (err) {
-    console.warn('[database] Fallback to remote wasm binary fetch...');
-    const res = await fetch('https://sql.js.org/dist/sql-wasm.wasm');
-    const ab = await res.arrayBuffer();
-    return await initSqlJs({ wasmBinary: Buffer.from(ab) });
+    console.warn('[database] Failed loading embedded wasm, falling back to default:', err);
+    return await initSqlJs();
   }
 }
 

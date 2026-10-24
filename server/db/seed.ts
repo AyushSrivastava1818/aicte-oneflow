@@ -26,7 +26,8 @@ export async function seedDatabase(): Promise<void> {
     }
 
     console.log('Seeding users...');
-    const passwordHash = await bcrypt.hash('Password@123', 10);
+    // Precomputed bcrypt hash for 'Password@123' to ensure instant sub-second seed in serverless runtimes
+    const passwordHash = '$2b$10$sQe0pUXrcFZHPvu4Cv8JH.OcvIKStxqCLkmRBMG4IO0bBQppq/iJ6';
     const users = [
       { id: 'usr-admin-01', email: 'admin@aicte.gov.in', name: 'Member Secretary AICTE HQ', role: 'CENTRAL_ADMIN', regionScope: null, instId: null },
       { id: 'usr-ro-north', email: 'ro.north@aicte.gov.in', name: 'Regional Director (Northern)', role: 'REGIONAL_OFFICER', regionScope: 'Northern', instId: null },
