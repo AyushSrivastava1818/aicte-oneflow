@@ -64,6 +64,7 @@ export function App() {
   // UI Navigation & Backend Connectivity State
   const [currentRole, setCurrentRole] = useState<Role>('REGIONAL_OFFICER');
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedDocket, setSelectedDocket] = useState<string | null>('AICTE/2026-27/RO-N/10942');
   const [isWalkthroughOpen, setIsWalkthroughOpen] = useState(false);
   const [backendConnected, setBackendConnected] = useState<boolean>(true);
@@ -303,7 +304,6 @@ export function App() {
       <Header
         currentRole={currentRole}
         onRoleChange={setCurrentRole}
-        onOpenWalkthrough={() => setIsWalkthroughOpen(true)}
         unreadAlertCount={notifications.filter(n => n.status === 'DELIVERED_SIMULATED').length}
         onResetSeedData={handleResetSeedData}
         backendConnected={backendConnected}
@@ -327,21 +327,25 @@ export function App() {
         </div>
       )}
 
-      {/* Primary Tab Navigation */}
-      <Navigation
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        counts={{
-          pendingWorkflow: applications.filter(a => a.currentStage !== 'APPROVED_UNCONDITIONAL' && a.currentStage !== 'REJECTED').length,
-          evcQueued: evcRecords.filter(e => e.status === 'PENDING_SCHEDULE').length,
-          overdueUndertakings: undertakings.filter(u => u.status === 'OVERDUE_ESCALATED').length,
-          expiringDocs: documents.filter(d => d.status === 'EXPIRING_SOON' || d.status === 'CRITICALLY_EXPIRED').length,
-          escalatedAlerts: notifications.filter(n => n.status === 'ESCALATED').length,
-        }}
-      />
+      {/* Collapsible Side Navigation & Main Workspace */}
+      <div className="flex-1 flex flex-row min-h-0">
+        <Navigation
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
+          onOpenWalkthrough={() => setIsWalkthroughOpen(true)}
+          counts={{
+            pendingWorkflow: applications.filter(a => a.currentStage !== 'APPROVED_UNCONDITIONAL' && a.currentStage !== 'REJECTED').length,
+            evcQueued: evcRecords.filter(e => e.status === 'PENDING_SCHEDULE').length,
+            overdueUndertakings: undertakings.filter(u => u.status === 'OVERDUE_ESCALATED').length,
+            expiringDocs: documents.filter(d => d.status === 'EXPIRING_SOON' || d.status === 'CRITICALLY_EXPIRED').length,
+            escalatedAlerts: notifications.filter(n => n.status === 'ESCALATED').length,
+          }}
+        />
 
-      {/* Main Workspace Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6" role="main">
+        {/* Main Workspace Body */}
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full overflow-y-auto" role="main">
         {activeTab === 'overview' && (
           <OverviewDashboard
             applications={applications}
@@ -404,7 +408,8 @@ export function App() {
             auditLogs={auditLogs}
           />
         )}
-      </main>
+        </main>
+      </div>
 
       {/* Interactive SIH Judging Tour Modal */}
       <WalkthroughModal

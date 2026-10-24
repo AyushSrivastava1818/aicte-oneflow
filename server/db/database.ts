@@ -1,12 +1,10 @@
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { SCHEMA_SQL } from './schema';
 
 let db: SqlJsDatabase | null = null;
 const DATA_DIR = path.resolve(process.cwd(), 'data');
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SCHEMA_FILE = path.resolve(__dirname, 'schema.sql');
 
 let customDbPath: string | null = null;
 
@@ -18,6 +16,9 @@ export function setDatabasePath(p: string | null): void {
 export function getDbFilePath(): string {
   if (customDbPath) return customDbPath;
   if (process.env.DB_PATH) return process.env.DB_PATH;
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return path.join('/tmp', 'aicte_oneflow.sqlite');
+  }
   const filename = process.env.NODE_ENV === 'test' ? 'test_aicte_oneflow.sqlite' : 'aicte_oneflow.sqlite';
   return path.join(DATA_DIR, filename);
 }
@@ -53,8 +54,7 @@ export async function getDatabase(): Promise<SqlJsDatabase> {
   } else {
     db = new SQL.Database();
     // Run initial schema migration
-    const schemaSql = fs.readFileSync(SCHEMA_FILE, 'utf-8');
-    db.run(schemaSql);
+    db.run(SCHEMA_SQL);
     persistToDisk(db);
   }
 

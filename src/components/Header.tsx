@@ -1,11 +1,11 @@
 import React from 'react';
 import { Role } from '../types';
-import { UserCheck, Play, Bell, Database } from 'lucide-react';
+import { UserCheck, Bell, Database } from 'lucide-react';
 
 interface HeaderProps {
   currentRole: Role;
   onRoleChange: (role: Role) => void;
-  onOpenWalkthrough: () => void;
+  onOpenWalkthrough?: () => void;
   unreadAlertCount: number;
   onResetSeedData: () => void;
   backendConnected?: boolean;
@@ -121,16 +121,6 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action Controls & Persona Selector */}
         <div className="flex items-center flex-wrap gap-2.5">
-          {/* SIH Judging Walkthrough Launcher */}
-          <button
-            onClick={onOpenWalkthrough}
-            aria-label="Launch interactive SIH judging tour"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded shadow-sm transition-all focus-visible:ring-2 focus-visible:ring-amber-500"
-          >
-            <Play className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
-            <span>SIH Judging Tour</span>
-          </button>
-
           {/* Persona Switcher Dropdown */}
           <div className="relative flex items-center bg-slate-50 border border-slate-300 rounded px-2.5 py-1">
             <UserCheck className="w-4 h-4 text-[#0f3c6e] mr-2 flex-shrink-0" aria-hidden="true" />
